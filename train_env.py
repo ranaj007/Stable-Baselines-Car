@@ -2,7 +2,7 @@ from stable_baselines3 import PPO
 import os
 from Stable_env_no_graphics import CarEnv
 
-models_dir = "models/PPO/Speed_Reward"
+models_dir = "models/PPO/Speed_Reward_2"
 logdir = "logs"
 #model_path = models_dir + "/160000.zip"
 
