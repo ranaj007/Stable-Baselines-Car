@@ -108,3 +108,9 @@ def get_angle_to_gate(Car_Pos: np.ndarray, next_gate: np.ndarray) -> float:
         absolute_angle += 360
     
     return absolute_angle
+
+@jit(nopython=True)
+def get_average_speed(number_of_samples: int, average_speed: float, Car_Vel: np.ndarray) -> float:
+    average_speed -= average_speed / number_of_samples
+    average_speed += math.sqrt(Car_Vel[0]**2 + Car_Vel[1]**2) / number_of_samples
+    return average_speed

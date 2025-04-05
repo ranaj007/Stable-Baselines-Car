@@ -9,7 +9,7 @@ class CarEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {"render.modes": ["human"]}
 
-    def __init__(self, do_render=False, action_limit=0, speed_reward=False):
+    def __init__(self, do_render=False, draw_lines=False, action_limit=0, speed_reward=False, training=True):
         super(CarEnv, self).__init__()
         # Define action and observation space
         # They must be gym.spaces objects
@@ -34,9 +34,11 @@ class CarEnv(gym.Env):
         self.total_score = 0
 
         self.do_render = do_render
+        self.draw_lines = draw_lines
         self.action_limit = action_limit
         self.wall_penalty = True
         self.speed_reward = speed_reward
+        self.training = training
 
         self.Load_borders(self.inner_lines, self.outer_lines, self.reward_gates_coords, self.start_positions)
 
@@ -45,14 +47,13 @@ class CarEnv(gym.Env):
         self.reward_gates_coords = np.array(self.reward_gates_coords)
         self.start_positions = np.array(self.start_positions, dtype = object)
 
-        self.Car_Speed = 3
-        #self.Car_Accel = 0.09
-        #self.Car_Accel_Dec = 0.96
-        self.Car_Accel = 0.2
-        #self.Car_Accel_Dec = 0.9
-        self.Car_Accel_Dec = 0.95
+        self.Car_Accel = 0.1 # 0.2
+        self.Car_Accel_Dec = 0.99 # 0.95
         self.Car_Rot_Speed = 3
         self.Car_Line_Length = 200
+        
+        self.avg_speed = 0
+        self.avg_speed_samples = 100
 
     def step(self, action):
         self.foward = False
@@ -81,10 +82,13 @@ class CarEnv(gym.Env):
         observation = self.on_update()
 
         info = {}
-        truncated = False
         #print(f'{action}')
         #print(f'{self.reward=}')
-        return observation, self.reward, self.done, truncated, info
+
+        if self.training:
+            return observation, self.reward, self.done, False, info
+        
+        return observation, self.reward, self.done, info
 
     def reset(self, seed=None, options=None):
         self.foward = False
@@ -108,6 +112,8 @@ class CarEnv(gym.Env):
         self.Car_Vel = np.array(calc.calc_line_length(0,0,random.uniform(0, 2), self.Car_Rot), dtype=np.float32)
         #self.Car_Vel = np.array(starting_state[3].copy(), dtype=np.float32)
 
+        self.avg_speed = 0
+
         self.start = [self.Car_Pos, self.Car_Rot, self.gate_progress, self.Car_Vel]
 
         self.past_reward_dist = 200
@@ -119,8 +125,10 @@ class CarEnv(gym.Env):
         observation = self.on_update()
         self.Car_Vel = temp_vel
 
-        info = {}
-        return observation, info  # reward, done, info can't be included
+        if self.training:
+            return observation, {}
+
+        return observation # reward, done, info can't be included
 
     def render(self, mode="human"):
         WHITE = (0,0,0)
@@ -138,7 +146,7 @@ class CarEnv(gym.Env):
         cv.circle(self.img, center, 3, (0, 0, 255), -1)
 
         # draw view lines
-        if True:
+        if self.draw_lines:
             for i in range(len(self.View_Line)):
                 cv.line(self.img, (int(self.Car_Pos[0]), int(self.Car_Pos[1])), (int(self.View_Line[i][0]), int(self.View_Line[i][1])), (0, 0, 255))
 
@@ -146,8 +154,10 @@ class CarEnv(gym.Env):
         cv.line(self.img, self.next_gate[0], self.next_gate[1], (0, 255, 0))
 
         # draw text
-        cv.putText(self.img, str(self.action_cntr), (100, 350), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
-        cv.putText(self.img, str(self.total_score), (100, 400), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
+        cv.putText(self.img, f'Action Counter: {self.action_cntr}', (100, 350), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
+        cv.putText(self.img, f'Total Score: {self.total_score:.1f}', (100, 400), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
+        cv.putText(self.img, f'Car Position: {self.Car_Pos[0]:.1f}, {self.Car_Pos[1]:.1f}', (100, 450), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
+        cv.putText(self.img, f'Average Speed: {self.avg_speed:.2f}', (100, 500), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
 
         # show image
         cv.imshow("Car Go Vroom", self.img)
@@ -212,7 +222,6 @@ class CarEnv(gym.Env):
 
         return np.array(temp_collisions.tolist() + [(gate_angle-180)/180] + [(min(self.reward_dist)-7.5)/200] + np.divide(self.Car_Vel.copy(), 4).tolist() + [(self.Car_Rot-180)/180], dtype=np.float32)
 
-
     
     def on_update(self):
         self.action_cntr += 1
@@ -227,7 +236,9 @@ class CarEnv(gym.Env):
         self.Car_Pos = np.add(self.Car_Pos, self.Car_Vel)
 
         self.Car_Vel = np.multiply(self.Car_Vel, self.Car_Accel_Dec)
-
+        
+        # TODO: add avg_speed to rewards
+        self.avg_speed = calc.get_average_speed(self.avg_speed_samples, self.avg_speed, self.Car_Vel)
 
         #self.Car_Vel[0] = round(self.Car_Vel[0], 3)
         #self.Car_Vel[1] = round(self.Car_Vel[1], 3)
@@ -267,6 +278,8 @@ class CarEnv(gym.Env):
                     self.reward = -10
                 self.done = True
                 
+        if self.Car_Pos[0] < 0 or self.Car_Pos[0] > self.SCREEN_WIDTH or self.Car_Pos[1] < 0 or self.Car_Pos[1] > self.SCREEN_HEIGHT:
+            self.done = True
 
         if self.do_render and self.action_cntr > 3000:
             self.render()
