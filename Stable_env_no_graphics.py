@@ -4,6 +4,7 @@ import gymnasium as gym
 import numpy as np
 import cv2 as cv
 import random
+import time
 
 class CarEnv(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -130,7 +131,7 @@ class CarEnv(gym.Env):
 
         return observation # reward, done, info can't be included
 
-    def render(self, mode="human"):
+    def render(self, mode="human", temp=True):
         WHITE = (0,0,0)
         self.img = np.zeros((self.SCREEN_HEIGHT, self.SCREEN_WIDTH,3), dtype=np.uint8)
         self.img += 85
@@ -139,7 +140,10 @@ class CarEnv(gym.Env):
         cv.fillPoly(self.img, pts = [self.outer_lines], color = (128, 128, 128))
         cv.fillPoly(self.img, pts = [self.inner_lines], color = (85, 85, 85))
         cv.polylines(self.img, [self.outer_lines], True, WHITE)
-        cv.polylines(self.img, [self.inner_lines], True, WHITE)
+        if temp:
+            cv.polylines(self.img, [self.inner_lines], True, WHITE)
+        else:
+            cv.polylines(self.img, [self.inner_lines], True, (255, 0, 0))
 
         # draw car
         center = (int(self.Car_Pos[0]), int(self.Car_Pos[1]))
@@ -223,7 +227,7 @@ class CarEnv(gym.Env):
         return np.array(temp_collisions.tolist() + [(gate_angle-180)/180] + [(min(self.reward_dist)-7.5)/200] + np.divide(self.Car_Vel.copy(), 4).tolist() + [(self.Car_Rot-180)/180], dtype=np.float32)
 
     
-    def on_update(self):
+    def on_update(self, steps: int = 2):
         self.action_cntr += 1
         if self.left:
             self.Car_Rot -= self.Car_Rot_Speed
@@ -233,60 +237,65 @@ class CarEnv(gym.Env):
             self.Car_Rot += self.Car_Rot_Speed
             self.Car_Rot = self.Car_Rot % 360
 
-        self.Car_Pos = np.add(self.Car_Pos, self.Car_Vel)
+        for i in range(steps):
+            self.Car_Pos = np.add(self.Car_Pos, self.Car_Vel)
 
-        self.Car_Vel = np.multiply(self.Car_Vel, self.Car_Accel_Dec)
-        
-        # TODO: add avg_speed to rewards
-        self.avg_speed = calc.get_average_speed(self.avg_speed_samples, self.avg_speed, self.Car_Vel)
+            self.Car_Vel = np.multiply(self.Car_Vel, self.Car_Accel_Dec)
+            
+            # TODO: add avg_speed to rewards
+            self.avg_speed = calc.get_average_speed(self.avg_speed_samples, self.avg_speed, self.Car_Vel)
 
-        #self.Car_Vel[0] = round(self.Car_Vel[0], 3)
-        #self.Car_Vel[1] = round(self.Car_Vel[1], 3)
-        
-        if np.sqrt(self.Car_Vel.dot(self.Car_Vel)) <= 1e-3:
-            self.Car_Vel = np.multiply(self.Car_Vel, 0)
-        
+            #self.Car_Vel[0] = round(self.Car_Vel[0], 3)
+            #self.Car_Vel[1] = round(self.Car_Vel[1], 3)
+            
+            if np.sqrt(self.Car_Vel.dot(self.Car_Vel)) <= 1e-3:
+                self.Car_Vel = np.multiply(self.Car_Vel, 0)
+            
 
-        if self.foward:
-            self.Car_Vel = np.add(self.Car_Vel, calc.calc_line_length(0, 0, self.Car_Accel, self.Car_Rot))
+            if self.foward:
+                self.Car_Vel = np.add(self.Car_Vel, calc.calc_line_length(0, 0, self.Car_Accel, self.Car_Rot))
 
-        if self.back:
-            self.Car_Vel = np.subtract(self.Car_Vel, calc.calc_line_length(0, 0, self.Car_Accel, self.Car_Rot))
+            if self.back:
+                self.Car_Vel = np.subtract(self.Car_Vel, calc.calc_line_length(0, 0, self.Car_Accel, self.Car_Rot))
 
-         # calc and draw edge detection lines
-        self.collisions = self.draw_car_lines(8, self.Car_Line_Length, [self.inner_lines, self.outer_lines])
+            # calc and draw edge detection lines
+            self.collisions = self.draw_car_lines(8, self.Car_Line_Length, [self.inner_lines, self.outer_lines])
 
-        # calc and draw reward gate detection lines
-        self.next_gate = [self.reward_gates_coords[self.gate_progress], self.reward_gates_coords[self.gate_progress+1]]
-        self.reward_dist = self.draw_car_lines(8, self.Car_Line_Length, [self.next_gate, self.next_gate])
+            # calc and draw reward gate detection lines
+            self.next_gate = [self.reward_gates_coords[self.gate_progress], self.reward_gates_coords[self.gate_progress+1]]
+            self.reward_dist = self.draw_car_lines(8, self.Car_Line_Length, [self.next_gate, self.next_gate])
 
-        if min(self.reward_dist) <= 7.5:
-            self.reward = 100
-            self.gate_progress += 2
-            if self.gate_progress > len(self.reward_gates_coords) - 1:
-                self.gate_progress = 0
-            self.past_reward_dist = 200
-        else:
-            self.reward = 0
+            if min(self.reward_dist) <= 7.5:
+                self.reward = 100
+                self.gate_progress += 2
+                if self.gate_progress > len(self.reward_gates_coords) - 1:
+                    self.gate_progress = 0
+                self.past_reward_dist = 200
+            else:
+                self.reward = 0
 
-        if self.speed_reward:
-            self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
+            if self.speed_reward:
+                self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
 
-        for dist in self.collisions:
-            if dist <= 5:
-                if self.wall_penalty:
-                    self.reward = -10
+            for dist in self.collisions:
+                if dist <= 5:
+                    if self.wall_penalty:
+                        self.reward = -10
+                    self.done = True
+                    
+            if self.Car_Pos[0] < 0 or self.Car_Pos[0] > self.SCREEN_WIDTH or self.Car_Pos[1] < 0 or self.Car_Pos[1] > self.SCREEN_HEIGHT:
                 self.done = True
-                
-        if self.Car_Pos[0] < 0 or self.Car_Pos[0] > self.SCREEN_WIDTH or self.Car_Pos[1] < 0 or self.Car_Pos[1] > self.SCREEN_HEIGHT:
-            self.done = True
 
-        if self.do_render and self.action_cntr > 3000:
-            self.render()
+            if self.do_render and self.action_cntr > 3000:
+                self.render()
 
-        if self.action_limit and self.action_cntr >= self.action_limit:
-            self.done = True
+            if self.do_render:
+                self.render(temp=i != 0)
+                time.sleep(0.01)
 
-        self.total_score += self.reward
+            if self.action_limit and self.action_cntr >= self.action_limit:
+                self.done = True
+
+            self.total_score += self.reward
         return self.get_observation()
 

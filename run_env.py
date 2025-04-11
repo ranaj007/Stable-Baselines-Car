@@ -17,7 +17,7 @@ if models:
     model_path = models[-1]
 
 
-env = CarEnv(training=False, draw_lines=True)
+env = CarEnv(training=False, draw_lines=True, do_render=True)
 
 model = PPO.load(model_path, env)
 
@@ -25,6 +25,5 @@ while True:
     obs = env.reset()
     done = False
     while not done:
-        env.render()
         action, _ = model.predict(obs)
         obs, reward, done, info = env.step(action)
