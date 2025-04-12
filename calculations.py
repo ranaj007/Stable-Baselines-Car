@@ -12,9 +12,21 @@ def calc_dist(Point1: np.ndarray, Point2: np.ndarray) -> float:
     return dist
 
 @jit(nopython=True)
-def calc_line_length(x_offset: float, y_offset: float, base_line_length: float, angle_degrees: float) -> np.ndarray:
+def _calc_line_length(origin: tuple[float, float], base_line_length: float, angle_degrees: float) -> np.ndarray:
+    x_offset, y_offset = origin
     angle_radians = -math.radians(angle_degrees)
-    XY = np.array([x_offset + base_line_length*math.cos(angle_radians), y_offset + base_line_length*math.sin(angle_radians)])
+    x = x_offset + base_line_length * math.cos(angle_radians)
+    y = y_offset + base_line_length * math.sin(angle_radians)
+    return np.array([x, y], dtype=np.float64)
+
+@jit(nopython=True)
+def floats_to_ints(XY: np.ndarray) -> np.ndarray:
+    return np.array([int(XY[0]), int(XY[1])], dtype=np.int32)
+
+def calc_line_length(origin: tuple[float, float], base_line_length: float, angle_degrees: float, integers: bool = False) -> np.ndarray:
+    XY = _calc_line_length(origin, base_line_length, angle_degrees)
+    if integers:
+        return floats_to_ints(XY)
     return XY
 
 @jit(nopython=True)

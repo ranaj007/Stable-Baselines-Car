@@ -6,7 +6,7 @@ import os
 
 
 
-run_name = "accel-0.1_decel-0.99"
+run_name = "accel-0.11_decel-0.97_rotation-5"
 models_dir = "models/PPO/" + run_name
 logdir = "logs/" + run_name
 model_path = ''
@@ -28,7 +28,7 @@ if not os.path.exists(logdir):
     os.makedirs(logdir)
 
 def make_env():
-    env = CarEnv(do_render=True, speed_reward=True, action_limit=1000)
+    env = CarEnv(do_render=False, speed_reward=True, action_limit=1000)
     env.reset()
     return env
 
@@ -39,13 +39,16 @@ i = 1
 
 if model_path:
     print("Loading", model_path)
-    model = PPO.load(model_path, env)
+    #model = PPO.load(model_path, env)
+    model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir)
+    model.set_parameters(model_path)
+
     i = int(model_path.split("\\")[-1].split(".")[0]) // TIMESTEPS + 1
 else:
     print("Creating new model")
     model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir)
 
 while True:
-    model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name="Speed_Reward")
+    model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name="Speed_Reward", progress_bar=True)
     model.save(f"{models_dir}/{TIMESTEPS*i}")
     i += 1

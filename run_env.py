@@ -6,7 +6,7 @@ models_dir = "models/PPO/Speed_Reward_5"
 model_path = models_dir + "/1070000.zip"
 # first attempt - best PPO 2950000.zip
 
-run_name = "accel-0.1_decel-0.99"
+run_name = "accel-0.11_decel-0.07_rotation-5"
 models_dir = "models/PPO/" + run_name
 model_path = ''
 
@@ -17,7 +17,7 @@ if models:
     model_path = models[-1]
 
 
-env = CarEnv(training=False, draw_lines=True, do_render=True)
+env = CarEnv(training=False, draw_lines=True, do_render=True, speed_reward=True)
 
 model = PPO.load(model_path, env)
 
