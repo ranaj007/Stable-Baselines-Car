@@ -76,7 +76,7 @@ class CarEnv(gym.Env):
         self.Car_Accel = 0.11  # 0.2
         self.Car_Accel_Dec = 0.97
         self.Car_Rot_Speed = 5
-        self.Car_Line_Length = 200
+        self.Car_Line_Length = 400
 
         self.avg_speed = 0
         self.avg_speed_samples = 100
@@ -188,7 +188,7 @@ class CarEnv(gym.Env):
             )
             cv.line(
                 self.img,
-                calc.floats_to_ints(self.Car_Pos),
+                calc.to_int(self.Car_Pos),
                 car_front_left_wheel,
                 BLACK,
                 thickness=3,
@@ -214,8 +214,8 @@ class CarEnv(gym.Env):
             for i in range(len(self.View_Line)):
                 cv.line(
                     self.img,
-                    calc.floats_to_ints(self.Car_Pos),
-                    calc.floats_to_ints(self.View_Line[i]),
+                    calc.to_int(self.Car_Pos),
+                    calc.to_int(self.View_Line[i]),
                     BLUE,
                 )
 
@@ -289,14 +289,6 @@ class CarEnv(gym.Env):
                 BLACK,
                 1,
             )
-
-        cv.line(
-            self.img,
-            calc.floats_to_ints(self.Car_Pos),
-            calc.calc_line_length(self.Car_Pos, 15, 90, integers=True),
-            (0, 255, 255),
-            thickness=3,
-        )
 
         # show image
         cv.imshow("Car Go Vroom", self.img)
@@ -394,7 +386,8 @@ class CarEnv(gym.Env):
 
         return np.array(
             temp_collisions.tolist()
-            + [(gate_angle - 180) / 180]
+            #+ [(gate_angle - 180) / 180]
+            + [0]
             + [(min(self.reward_dist) - 7.5) / 200]
             + np.divide(self.Car_Vel.copy(), 4).tolist()
             + [(self.Car_Rot - 180) / 180],

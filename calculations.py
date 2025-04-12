@@ -20,13 +20,13 @@ def _calc_line_length(origin: tuple[float, float], base_line_length: float, angl
     return np.array([x, y], dtype=np.float64)
 
 @jit(nopython=True)
-def floats_to_ints(XY: np.ndarray) -> np.ndarray:
+def to_int(XY: np.ndarray) -> np.ndarray:
     return np.array([int(XY[0]), int(XY[1])], dtype=np.int32)
 
 def calc_line_length(origin: tuple[float, float], base_line_length: float, angle_degrees: float, integers: bool = False) -> np.ndarray:
     XY = _calc_line_length(origin, base_line_length, angle_degrees)
     if integers:
-        return floats_to_ints(XY)
+        return to_int(XY)
     return XY
 
 @jit(nopython=True)
@@ -35,6 +35,26 @@ def det(a: np.ndarray, b: np.ndarray) -> float:
 
 @jit(nopython=True)
 def line_intersection(Car_Pos: np.ndarray, line1: np.ndarray, line2: np.ndarray) -> np.ndarray | None:
+    """
+    Calculates the intersection point between two line segments, with an early rejection
+    optimization based on distance from the car.
+
+    Parameters:
+    -----------
+    Car_Pos : np.ndarray
+        The position of the car, used to skip far-away segments for performance.
+    line1 : tuple of np.ndarray
+        The first line segment, typically the ray being cast (Point1, Point2).
+    line2 : tuple of np.ndarray
+        The second line segment to test against (e.g., wall or gate).
+
+    Returns:
+    --------
+    np.ndarray or None
+        The (x, y) coordinates of the intersection point if one exists within bounds,
+        otherwise None.
+    """
+    # Calculate the differences in x and y coordinates for both lines
     xdiff = (line1[0][0] - line1[1][0], line2[0][0] - line2[1][0])
     ydiff = (line1[0][1] - line1[1][1], line2[0][1] - line2[1][1])
 
@@ -69,34 +89,33 @@ def line_intersection(Car_Pos: np.ndarray, line1: np.ndarray, line2: np.ndarray)
         return None
     else:
         return np.array([x, y])
-
-    def to_int(Point1):
-        return (int(Point1[0]), int(Point1[1]))
-
-    """
-    if False:
-        WHITE = (255,255,255)
-        img = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH,3), dtype=np.uint8)
-        center = (int(Car_Pos[0]), int(Car_Pos[1]))
-        cv.circle(img, center, 3, (0, 0, 255), -1)
-        points = tuple(map(to_int, line1))
-        cv.line(img, points[0], points[1], (255, 0, 0))
-        points = tuple(map(to_int, line2))
-        cv.line(img, points[0], points[1], (0, 0, 255))
-        cv.putText(img, "My method: " + a, (100, 350), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
-        cv.putText(img, "Th method: "+ b, (100, 400), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
-        cv.putText(img, f"{point1_dist=}", (100, 300), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
-        cv.putText(img, f"{point2_dist=}", (100, 250), cv.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1)
-        cv.imshow("Car Go Vroom", img)
-        cv.waitKey()
-    if b == "Return None":
-        return None
-    else:
-        return x, y
-    """
     
 @jit(nopython=True)
 def detect_collisions(Car_Pos: np.ndarray, Point1: np.ndarray, Point2: np.ndarray, object1: np.ndarray, inc: int = 1) -> float: # inc = 1 for continuious lines, inc = 2 for reward gates
+    """
+    Casts a ray from Point1 to Point2 and checks for intersections with segments
+    in the given object (e.g., walls or gates), returning the closest intersection distance.
+
+    Parameters:
+    -----------
+    Car_Pos : np.ndarray
+        Position of the car, used by the underlying line_intersection function to skip distant lines.
+    Point1 : np.ndarray
+        Starting point of the ray (typically the car's position).
+    Point2 : np.ndarray
+        End point of the ray (defines direction and range).
+    object1 : np.ndarray
+        A list of points defining the segments to test for collision (every pair defines a line).
+    inc : int, optional
+        Step increment to interpret line segments from object1 (default is 1 for continuous walls,
+        2 for paired gates).
+
+    Returns:
+    --------
+    float
+        The shortest distance from Point1 to the nearest intersection point,
+        or 200 if no collision was found.
+    """
     distances = np.full(6, 200, dtype=np.float32)
     a = 0
     for idx in range(1, len(object1), inc):

@@ -40,13 +40,13 @@ i = 1
 if model_path:
     print("Loading", model_path)
     #model = PPO.load(model_path, env)
-    model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir)
+    model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu")
     model.set_parameters(model_path)
 
     i = int(model_path.split("\\")[-1].split(".")[0]) // TIMESTEPS + 1
 else:
     print("Creating new model")
-    model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir)
+    model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu")
 
 while True:
     model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name="Speed_Reward", progress_bar=True)
