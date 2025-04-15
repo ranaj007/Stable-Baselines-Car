@@ -510,4 +510,10 @@ class CarEnv(gym.Env):
                 self.done = True
 
             self.total_score += self.reward
-        return self.get_observation()
+
+        observation = self.get_observation()
+        
+        if np.any(observation > 1) or np.any(observation < -1):
+            print("WARNING: Observation out of bounds:", observation)
+            observation = np.clip(observation, -1, 1)
+        return observation
