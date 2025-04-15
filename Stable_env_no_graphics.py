@@ -25,6 +25,7 @@ class CarEnv(gym.Env):
         action_limit=0,
         speed_reward=False,
         training=True,
+        number_of_collisions=3,
     ):
         super(CarEnv, self).__init__()
         # Define action and observation space
@@ -32,7 +33,7 @@ class CarEnv(gym.Env):
         # Example when using discrete actions:
         self.action_space = spaces.Discrete(6)
         # Example for using image as input (channel-first; channel-last also works):
-        N_CHANNELS = 13
+        N_CHANNELS = 5 + 8 * number_of_collisions
         self.observation_space = spaces.Box(
             low=-1, high=1, shape=(N_CHANNELS,), dtype=np.float32
         )
@@ -56,6 +57,7 @@ class CarEnv(gym.Env):
         self.wall_penalty = True
         self.speed_reward = speed_reward
         self.training = training
+        self.number_of_collisions = number_of_collisions
 
         self.last_frame_time = time.time()
 
@@ -355,8 +357,8 @@ class CarEnv(gym.Env):
                 starting_conditions.append([[temp_list[i-5], temp_list[i-4]], temp_list[i-3], temp_list[i-2], [temp_list[i-1], temp_list[i]]])
     """
 
-    def draw_car_lines(self, num_o_lines, line_length, collision_objects):
-        distances = np.full(num_o_lines, line_length, dtype=np.float32)
+    def draw_car_lines(self, num_o_lines, line_length, collision_objects, number_of_collisions: int = 1):
+        distances = np.full(num_o_lines * number_of_collisions, line_length, dtype=np.float32)
         for i in range(num_o_lines):
             self.View_Line[i] = calc.calc_line_length(
                 self.Car_Pos,
@@ -365,19 +367,24 @@ class CarEnv(gym.Env):
             )
 
             collision1 = calc.detect_collisions(
-                self.Car_Pos, self.Car_Pos, self.View_Line[i], collision_objects[0]
+                self.Car_Pos, self.Car_Pos, self.View_Line[i], collision_objects[0], self.Car_Line_Length, number_of_collisions
             )
             collision2 = calc.detect_collisions(
-                self.Car_Pos, self.Car_Pos, self.View_Line[i], collision_objects[1]
+                self.Car_Pos, self.Car_Pos, self.View_Line[i], collision_objects[1], self.Car_Line_Length, number_of_collisions
             )
 
-            distances[i] = min(collision1, collision2)
+            collisions = np.concatenate((collision1, collision2), axis=0)
+
+            collisions.sort()
+            collisions = collisions[:number_of_collisions]
+
+            distances[i * number_of_collisions : (i + 1) * number_of_collisions] = collisions
         return distances
 
     def get_observation(self):
         temp_collisions = self.collisions.copy()
         for idx in range(len(temp_collisions)):
-            temp_collisions[idx] = (temp_collisions[idx] - 105) / 100
+            temp_collisions[idx] = (temp_collisions[idx] - self.Car_Line_Length / 2) / (self.Car_Line_Length / 2)
 
         # reward_index = [(self.reward_dist.index(min(self.reward_dist))-(len(self.reward_dist))/2)/(len(self.reward_dist))/2]
         # temp_list = self.reward_dist.tolist()
@@ -386,9 +393,8 @@ class CarEnv(gym.Env):
 
         return np.array(
             temp_collisions.tolist()
-            #+ [(gate_angle - 180) / 180]
-            + [0]
-            + [(min(self.reward_dist) - 7.5) / 200]
+            + [(gate_angle - 180) / 180]
+            + [(min(self.reward_dist) - 7.5) / self.Car_Line_Length]
             + np.divide(self.Car_Vel.copy(), 4).tolist()
             + [(self.Car_Rot - 180) / 180],
             dtype=np.float32,
@@ -455,7 +461,7 @@ class CarEnv(gym.Env):
 
             # calc and draw edge detection lines
             self.collisions = self.draw_car_lines(
-                8, self.Car_Line_Length, [self.inner_lines, self.outer_lines]
+                8, self.Car_Line_Length, [self.inner_lines, self.outer_lines], self.number_of_collisions
             )
 
             # calc and draw reward gate detection lines

@@ -48,7 +48,7 @@ def det(a: np.ndarray, b: np.ndarray) -> float:
 
 @jit(nopython=True)
 def line_intersection(
-    Car_Pos: np.ndarray, line1: np.ndarray, line2: np.ndarray
+    Car_Pos: np.ndarray, line1: np.ndarray, line2: np.ndarray, max_dist: float
 ) -> np.ndarray | None:
     """
     Calculates the intersection point between two line segments, with an early rejection
@@ -56,18 +56,20 @@ def line_intersection(
 
     Parameters:
     -----------
-    Car_Pos : np.ndarray
-        The position of the car, used to skip far-away segments for performance.
-    line1 : tuple of np.ndarray
-        The first line segment, typically the ray being cast (Point1, Point2).
-    line2 : tuple of np.ndarray
-        The second line segment to test against (e.g., wall or gate).
+        Car_Pos : np.ndarray
+            The position of the car, used to skip far-away segments for performance.
+        line1 : tuple of np.ndarray
+            The first line segment, typically the ray being cast (Point1, Point2).
+        line2 : tuple of np.ndarray
+            The second line segment to test against (e.g., wall or gate).
+        max_dist : float
+            The maximum distance to consider for the intersection check.
 
     Returns:
     --------
-    np.ndarray or None
-        The (x, y) coordinates of the intersection point if one exists within bounds,
-        otherwise None.
+        np.ndarray or None
+            The (x, y) coordinates of the intersection point if one exists within bounds,
+            otherwise None.
     """
     # Calculate the differences in x and y coordinates for both lines
     xdiff = (line1[0][0] - line1[1][0], line2[0][0] - line2[1][0])
@@ -80,7 +82,7 @@ def line_intersection(
     point1_dist = calc_dist(Car_Pos, line2[0])
     point2_dist = calc_dist(Car_Pos, line2[1])
     if point1_dist > line_length and point2_dist > line_length:
-        if point1_dist > 210 and point2_dist > 210:
+        if point1_dist > max_dist + 10 and point2_dist > max_dist + 10:
             # a = "Return None"
             return None
 
@@ -111,42 +113,48 @@ def detect_collisions(
     Point1: np.ndarray,
     Point2: np.ndarray,
     object1: np.ndarray,
+    max_dist: float,
+    number_of_collisions: int = 1,
     inc: int = 1,
-) -> float:  # inc = 1 for continuious lines, inc = 2 for reward gates
+) -> np.ndarray:  # inc = 1 for continuious lines, inc = 2 for reward gates
     """
     Casts a ray from Point1 to Point2 and checks for intersections with segments
     in the given object (e.g., walls or gates), returning the closest intersection distance.
 
     Parameters:
-    -----------
-    Car_Pos : np.ndarray
-        Position of the car, used by the underlying line_intersection function to skip distant lines.
-    Point1 : np.ndarray
-        Starting point of the ray (typically the car's position).
-    Point2 : np.ndarray
-        End point of the ray (defines direction and range).
-    object1 : np.ndarray
-        A list of points defining the segments to test for collision (every pair defines a line).
-    inc : int, optional
-        Step increment to interpret line segments from object1 (default is 1 for continuous walls,
-        2 for paired gates).
+        Car_Pos : np.ndarray
+            Position of the car, used by the underlying line_intersection function to skip distant lines.
+        Point1 : np.ndarray
+            Starting point of the ray (typically the car's position).
+        Point2 : np.ndarray
+            End point of the ray (defines direction and range).
+        object1 : np.ndarray
+            A list of points defining the segments to test for collision (every pair defines a line).
+        max_dist : float
+            Maximum distance to consider for collision detection. If no collision is found within this distance,
+            the function returns this value.
+        number_of_collisions : int, optional
+            Number of closest collisions to return (default is 1).
+        inc : int, optional
+            Step increment to interpret line segments from object1 (default is 1 for continuous walls,
+            2 for paired gates).
 
     Returns:
-    --------
-    float
-        The shortest distance from Point1 to the nearest intersection point,
-        or 200 if no collision was found.
+        np.ndarray
+            An array of distances to the closest intersections, sorted in ascending order.
+            If no intersections are found, returns an array filled with max_dist.
     """
-    distances = np.full(6, 200, dtype=np.float32)
+    distances = np.full(12, max_dist, dtype=np.float32)
     a = 0
     for idx in range(1, len(object1), inc):
         coords = line_intersection(
-            Car_Pos, (Point1, Point2), (object1[idx - 1], object1[idx])
+            Car_Pos, (Point1, Point2), (object1[idx - 1], object1[idx]), max_dist
         )
         if coords is not None:
             distances[a] = calc_dist(Point1, coords)
             a += 1
-    return min(distances)
+    distances.sort()
+    return distances[:number_of_collisions]
 
 
 @jit(nopython=True)
