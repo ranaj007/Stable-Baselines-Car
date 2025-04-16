@@ -1,7 +1,5 @@
-import calculations as calc
 import numpy as np
 import cv2 as cv
-import random
 import time
 
 BLACK = (0, 0, 0)
@@ -116,7 +114,7 @@ class Track():
             )
 
         cv.imshow("Car Go Vroom", self.img)
-        key = cv.waitKey(1)
+        cv.waitKey(1)
 
 
     # ----------------------------------------------------------------------------------------------------------------------------------------------------------
