@@ -3,13 +3,8 @@ from car import CarAgent
 from track import Track
 from glob import glob
 
-models_dir = "models/PPO/Speed_Reward_5"
-model_path = models_dir + "/1070000.zip"
-# first attempt - best PPO 2950000.zip
-
 run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2"
 models_dir = "models/PPO/" + run_name
-model_path = ''
 
 models = glob(f"{models_dir}/*.zip")
 
@@ -19,35 +14,20 @@ if models:
 
 track = Track(do_render=True, show_fps=True)
 
-env = CarAgent(
-    track=track,
-    do_render=True,
-    training=False
-)
+envs = [CarAgent(track=track, do_render=True, training=False) for _ in range(3)]
 
-model = PPO.load(model_path, env, device="cpu")
+models = [PPO.load(model_path, env, device="cpu") for env in envs]
 
-env2 = CarAgent(
-    track=track,
-    do_render=True,
-    training=False
-)
-
-model2 = PPO.load(model_path, env2, device="cpu")
+obs_array = [env.reset() for env in envs]
 
 while True:
-    obs = env.reset()
-    obs2 = env2.reset()
-    action = 0
-    done = False
-    while not done:
-        img = track.new_frame()
-        env.new_frame(img)
-        action, _ = model.predict(obs)
+    track.new_frame()
+
+    for i, env in enumerate(envs):
+        action, _ = models[i].predict(obs_array[i])
         obs, reward, done, info = env.step(action)
+        obs_array[i] = obs
+        if done:
+            obs_array[i] = env.reset()
 
-        env2.new_frame(img)
-        action2, _ = model2.predict(obs2)
-        obs2, reward2, done2, info2 = env2.step(action2)
-
-        track.render()
+    track.render()

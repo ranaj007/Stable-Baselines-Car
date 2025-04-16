@@ -150,11 +150,6 @@ class CarAgent(gym.Env):
 
         return observation  # reward, done, info can't be included
     
-    def new_frame(self, img: np.ndarray):
-        self.img = img
-        self.SCREEN_WIDTH = img.shape[1]
-        self.SCREEN_HEIGHT = img.shape[0]
-
     def render(self):
         # draw car
         car_window = calc.calc_line_length(self.Car_Pos, 7, self.Car_Rot, integers=True)

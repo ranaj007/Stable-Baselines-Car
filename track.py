@@ -13,8 +13,8 @@ class Track():
 
     def __init__(
         self,
-        do_render=False,
-        show_fps=False,
+        do_render: bool = False,
+        show_fps: bool = False,
     ):
         self.SCREEN_WIDTH = 1200
         self.SCREEN_HEIGHT = 1000
@@ -32,12 +32,7 @@ class Track():
 
         self.last_frame_time = time.time()
 
-        self.Load_borders(
-            self.inner_lines,
-            self.outer_lines,
-            self.reward_gates_coords,
-            self.start_positions,
-        )
+        self.Load_borders()
 
         self.inner_lines = np.array(self.inner_lines)
         self.outer_lines = np.array(self.outer_lines)
@@ -45,27 +40,27 @@ class Track():
         self.start_positions = np.array(self.start_positions, dtype=object)
 
 
-    def Load_borders(self, inner_lines, outer_lines, reward_gates, starting_conditions):
+    def Load_borders(self):
         with open("Game_Boarders_Inner_Resized.txt") as file1:
             temp_list = file1.readlines()
             for i in range(1, len(temp_list), 2):
-                inner_lines.append([int(temp_list[i - 1]), int(temp_list[i])])
+                self.inner_lines.append([int(temp_list[i - 1]), int(temp_list[i])])
 
         with open("Game_Boarders_Outer_Resized.txt") as file1:
             temp_list = file1.readlines()
             for i in range(1, len(temp_list), 2):
-                outer_lines.append([int(temp_list[i - 1]), int(temp_list[i])])
+                self.outer_lines.append([int(temp_list[i - 1]), int(temp_list[i])])
 
         with open("Reward_Gates.txt") as file1:
             temp_list = file1.readlines()
             for i in range(1, len(temp_list), 2):
-                reward_gates.append([int(temp_list[i - 1]), int(temp_list[i])])
+                self.reward_gates_coords.append([int(temp_list[i - 1]), int(temp_list[i])])
 
         with open("Starting_States.txt") as file1:
             temp_list = file1.readlines()
             temp_list = [int(i) for i in temp_list]
             for i in range(3, len(temp_list), 4):
-                starting_conditions.append(
+                self.start_positions.append(
                     [
                         [temp_list[i - 3], temp_list[i - 2]],
                         temp_list[i - 1],
@@ -77,7 +72,7 @@ class Track():
         return self.inner_lines, self.outer_lines, self.reward_gates_coords, self.start_positions
 
     def new_frame(self) -> np.ndarray:
-        self.img = np.zeros((self.SCREEN_HEIGHT, self.SCREEN_WIDTH, 3), dtype=np.uint8)
+        self.img.fill(0)
         self.img += 85
 
         # draw track
