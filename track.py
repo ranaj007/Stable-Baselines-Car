@@ -15,10 +15,13 @@ class Track():
         self,
         do_render: bool = False,
         show_fps: bool = False,
+        target_fps: int = 60,
     ):
         self.SCREEN_WIDTH = 1200
         self.SCREEN_HEIGHT = 1000
         self.img = np.zeros((self.SCREEN_HEIGHT, self.SCREEN_WIDTH, 3), dtype=np.uint8)
+
+        self.target_spf = 1 / target_fps
 
         self.inner_lines = []
         self.outer_lines = []
@@ -85,13 +88,10 @@ class Track():
     
 
     def render(self):
-        fps = 1 / (time.time() - self.last_frame_time)
+        spf = (time.time() - self.last_frame_time)
+        fps = 1 / spf if spf > 0 else 0
 
-        target_fps = 60
-        target_spf = 1 / target_fps
-
-        spf = 1 / fps
-        sleep_time = max(0, target_spf - spf)  # Ensure sleep_time is non-negative
+        sleep_time = max(0, self.target_spf - spf)  # Ensure sleep_time is non-negative
         time.sleep(sleep_time)
         
         fps = 1 / (time.time() - self.last_frame_time)
