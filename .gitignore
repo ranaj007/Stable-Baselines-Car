@@ -164,3 +164,4 @@ cython_debug/
 .vs/
 logs/
 models/
+*.prof
