@@ -14,7 +14,7 @@ if models:
 
 track = Track(do_render=True, show_fps=True)
 
-envs = [CarAgent(track=track, do_render=True, training=False) for _ in range(3)]
+envs = [CarAgent(track=track, do_render=True, draw_lines=False) for _ in range(1)]
 
 models = [PPO.load(model_path, env, device="cpu") for env in envs]
 

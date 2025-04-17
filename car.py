@@ -26,7 +26,8 @@ class CarAgent(gym.Env):
         render_text: bool = False,
         action_limit: int = 0,
         speed_reward: bool = False,
-        training: bool = True,
+        training: bool = False,
+        number_of_view_lines: int = 8,
         number_of_collisions: int = 3,
     ):
         super(CarAgent, self).__init__()
@@ -37,7 +38,9 @@ class CarAgent(gym.Env):
             low=-1, high=1, shape=(N_CHANNELS,), dtype=np.float32
         )
 
-        inner_lines, outer_lines, reward_gates_coords, start_positions = track.get_borders()
+        inner_lines, outer_lines, reward_gates_coords, start_positions = (
+            track.get_borders()
+        )
 
         self.img = track.new_frame()
         self.SCREEN_WIDTH = self.img.shape[1]
@@ -60,6 +63,7 @@ class CarAgent(gym.Env):
         self.speed_reward = speed_reward
         self.training = training
         self.number_of_collisions = number_of_collisions
+        self.number_of_view_lines = number_of_view_lines
 
         self.Car_Accel = 0.11
         self.Car_Accel_Dec = 0.97
@@ -72,7 +76,6 @@ class CarAgent(gym.Env):
 
         self.avg_speed = 0
         self.avg_speed_samples = 100
-
 
     def step(self, action: int):
         self.foward = False
@@ -149,7 +152,7 @@ class CarAgent(gym.Env):
             return observation, {}
 
         return observation  # reward, done, info can't be included
-    
+
     def render(self):
         # draw car
         car_window = calc.calc_line_length(self.Car_Pos, 7, self.Car_Rot, integers=True)
@@ -193,6 +196,15 @@ class CarAgent(gym.Env):
                     calc.to_int(self.View_Line[i]),
                     BLUE,
                 )
+
+            for i in range(0, len(self.collisions), self.number_of_collisions):
+                collision = calc.calc_line_length(
+                    self.Car_Pos,
+                    self.collisions[i],
+                    self.Car_Rot + (360 / self.number_of_view_lines) * i,
+                )
+                collision = calc.to_int(collision)
+                #cv.circle(self.img, collision, 5, color=(0, 255, 0))
 
         # draw gate
         cv.line(self.img, self.next_gate[0], self.next_gate[1], GREEN)
@@ -242,6 +254,7 @@ class CarAgent(gym.Env):
         line_length: float,
         collision_objects: list,
         number_of_collisions: int = 1,
+        draw: bool = False,
     ):
         distances = np.full(
             num_o_lines * number_of_collisions, line_length, dtype=np.float32
@@ -278,6 +291,15 @@ class CarAgent(gym.Env):
             distances[i * number_of_collisions : (i + 1) * number_of_collisions] = (
                 collisions
             )
+            if self.draw_lines and draw:
+                for j in range(number_of_collisions):
+                    collision = calc.calc_line_length(
+                        self.Car_Pos,
+                        collisions[j],
+                        self.Car_Rot + (360 / num_o_lines) * i,
+                    )
+                    collision = calc.to_int(collision)
+                    cv.circle(self.img, collision, 5, color=(0, 0, 255))
         return distances
 
     def get_observation(self):
@@ -359,10 +381,11 @@ class CarAgent(gym.Env):
 
             # calc and draw edge detection lines
             self.collisions = self.draw_car_lines(
-                8,
+                self.number_of_view_lines,
                 self.Car_Line_Length,
                 [self.inner_lines, self.outer_lines],
                 self.number_of_collisions,
+                i==steps-1
             )
 
             # calc and draw reward gate detection lines
@@ -371,7 +394,9 @@ class CarAgent(gym.Env):
                 self.reward_gates_coords[self.gate_progress + 1],
             ]
             self.reward_dist = self.draw_car_lines(
-                8, self.Car_Line_Length, [self.next_gate, self.next_gate]
+                self.number_of_view_lines,
+                self.Car_Line_Length,
+                [self.next_gate, self.next_gate],
             )
 
             if min(self.reward_dist) <= 7.5:
@@ -400,11 +425,11 @@ class CarAgent(gym.Env):
             ):
                 self.done = True
 
-            if self.do_render and self.action_cntr > 3000:
-                self.render()
-
-            if self.do_render:
-                self.render()
+            if i == steps - 1 and self.do_render:
+                #if self.action_cntr > 3000:
+                    #self.render()
+                if self.do_render:
+                    self.render()
 
             if self.action_limit and self.action_cntr >= self.action_limit:
                 self.done = True
