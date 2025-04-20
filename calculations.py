@@ -182,3 +182,14 @@ def get_average_speed(
     average_speed -= average_speed / number_of_samples
     average_speed += math.sqrt(Car_Vel[0] ** 2 + Car_Vel[1] ** 2) / number_of_samples
     return average_speed
+
+@jit(nopython=True)
+def get_closest_point_idx(point: np.ndarray, lines: list) -> int:
+    min_dist = 1e9
+    min_idx = -1
+    for idx in range(len(lines)):
+        d = calc_dist(point, lines[idx])
+        if d < min_dist:
+            min_dist = d
+            min_idx = idx
+    return min_idx

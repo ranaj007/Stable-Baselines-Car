@@ -1,7 +1,9 @@
+from stable_baselines3 import PPO
 from gymnasium import spaces
 import calculations as calc
 import gymnasium as gym
 from track import Track
+from glob import glob
 import numpy as np
 import cv2 as cv
 import random
@@ -110,7 +112,8 @@ class CarAgent(gym.Env):
 
         return observation, self.reward, self.done, info
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        random.seed(seed)
         self.foward = False
         self.back = False
         self.left = False
@@ -204,7 +207,7 @@ class CarAgent(gym.Env):
                     self.Car_Rot + (360 / self.number_of_view_lines) * i,
                 )
                 collision = calc.to_int(collision)
-                #cv.circle(self.img, collision, 5, color=(0, 255, 0))
+                # cv.circle(self.img, collision, 5, color=(0, 255, 0))
 
         # draw gate
         cv.line(self.img, self.next_gate[0], self.next_gate[1], GREEN)
@@ -319,7 +322,8 @@ class CarAgent(gym.Env):
             + [(gate_angle - 180) / 180]
             + [(min(self.reward_dist) - 7.5) / self.Car_Line_Length]
             + np.divide(self.Car_Vel.copy(), 4).tolist()
-            + [(self.Car_Rot - 180) / 180],
+            # + [(self.Car_Rot - 180) / 180],
+            + [min(max((self.Car_Rot - 180) / 180, -1), 1)],
             dtype=np.float32,
         )
 
@@ -385,7 +389,7 @@ class CarAgent(gym.Env):
                 self.Car_Line_Length,
                 [self.inner_lines, self.outer_lines],
                 self.number_of_collisions,
-                i==steps-1
+                i == steps - 1,
             )
 
             # calc and draw reward gate detection lines
@@ -426,8 +430,291 @@ class CarAgent(gym.Env):
                 self.done = True
 
             if i == steps - 1 and self.do_render:
-                #if self.action_cntr > 3000:
-                    #self.render()
+                # if self.action_cntr > 3000:
+                # self.render()
+                if self.do_render:
+                    self.render()
+
+            if self.action_limit and self.action_cntr >= self.action_limit:
+                self.done = True
+
+            self.total_score += self.reward
+
+        observation = self.get_observation()
+
+        if np.any(observation > 1) or np.any(observation < -1):
+            print("WARNING: Observation out of bounds:", observation)
+            observation = np.clip(observation, -1, 1)
+        return observation
+
+
+class ChaserAgent(CarAgent):
+    def __init__(
+        self,
+        track: Track,
+        target: CarAgent,
+        do_render: bool = False,
+        training: bool = False,
+        action_limit: int = 0,
+        number_of_view_lines: int = 8,
+        number_of_collisions: int = 3,
+    ):
+        super(ChaserAgent, self).__init__(
+            track=track,
+            do_render=do_render,
+            draw_lines=False,
+            render_text=True,
+            action_limit=action_limit,
+            speed_reward=False,
+            training=training,
+            number_of_view_lines=number_of_view_lines,
+            number_of_collisions=number_of_collisions,
+        )
+
+        self.target = target
+        self.max_dist = (self.SCREEN_WIDTH**2 + self.SCREEN_HEIGHT**2) ** 0.5
+
+        self.closest_point = 0
+        self.closest_target_point = 0
+        self.distance_to_target = len(self.inner_lines) / 2
+
+        run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2"
+        models_dir = "models/PPO/" + run_name
+
+        models = glob(f"{models_dir}/*.zip")
+
+        if models:
+            models.sort(key=lambda x: int(x.split("\\")[-1].split(".")[0]))
+            model_path = models[-1]
+
+        self.target_model = PPO.load(model_path, target, device="cpu")
+        self.target_obs = target.reset()
+
+    def step_target(self):
+        action, _ = self.target_model.predict(self.target_obs)
+        self.target_obs, _, done, _ = self.target.step(action)
+        if done:
+            self.target_obs = self.target.reset()
+
+    def step(self, action: int):
+        self.step_target()
+        return super().step(action)
+
+    def render(self):
+        # draw car
+        car_window = calc.calc_line_length(self.Car_Pos, 7, self.Car_Rot, integers=True)
+        car_back = calc.calc_line_length(
+            self.Car_Pos, 5, self.Car_Rot + 180, integers=True
+        )
+        car_front = calc.calc_line_length(self.Car_Pos, 5, self.Car_Rot, integers=True)
+        for i in range(4):
+            car_front_left_wheel = calc.calc_line_length(
+                self.Car_Pos, 4, self.Car_Rot + 45 + 90 * i, integers=True
+            )
+            cv.line(
+                self.img,
+                calc.to_int(self.Car_Pos),
+                car_front_left_wheel,
+                BLACK,
+                thickness=3,
+            )
+
+        cv.line(
+            self.img,
+            car_front,
+            car_window,
+            BLUE,
+            thickness=3,
+        )
+        cv.line(
+            self.img,
+            car_back,
+            car_front,
+            RED,
+            thickness=3,
+        )
+
+        # draw view lines
+        if self.draw_lines:
+            for i in range(len(self.View_Line)):
+                cv.line(
+                    self.img,
+                    calc.to_int(self.Car_Pos),
+                    calc.to_int(self.View_Line[i]),
+                    BLUE,
+                )
+
+            for i in range(0, len(self.collisions), self.number_of_collisions):
+                collision = calc.calc_line_length(
+                    self.Car_Pos,
+                    self.collisions[i],
+                    self.Car_Rot + (360 / self.number_of_view_lines) * i,
+                )
+                collision = calc.to_int(collision)
+                # cv.circle(self.img, collision, 5, color=(0, 255, 0))
+
+        if self.render_text:
+            # draw text
+            cv.putText(
+                self.img,
+                f"Action Counter: {self.action_cntr}",
+                (100, 350),
+                cv.FONT_HERSHEY_SIMPLEX,
+                1,
+                BLACK,
+                1,
+            )
+            cv.putText(
+                self.img,
+                f"Total Score: {self.total_score:.1f}",
+                (100, 400),
+                cv.FONT_HERSHEY_SIMPLEX,
+                1,
+                BLACK,
+                1,
+            )
+            cv.putText(
+                self.img,
+                f"Car Position: {self.Car_Pos[0]:.1f}, {self.Car_Pos[1]:.1f}",
+                (100, 450),
+                cv.FONT_HERSHEY_SIMPLEX,
+                1,
+                BLACK,
+                1,
+            )
+            cv.putText(
+                self.img,
+                f"Average Speed: {self.avg_speed:.2f}",
+                (100, 500),
+                cv.FONT_HERSHEY_SIMPLEX,
+                1,
+                BLACK,
+                1,
+            )
+
+        if self.closest_target_point >= self.closest_point:
+            target_distance_lines = self.inner_lines[self.closest_point:self.closest_target_point]
+        else:
+            target_distance_lines = np.concatenate(
+                [self.inner_lines[self.closest_point:], self.inner_lines[:self.closest_target_point]], axis=0
+            )
+
+        cv.polylines(
+            self.img,
+            [target_distance_lines],
+            False,
+            GREEN,
+            thickness=3,
+        )
+
+    def get_observation(self):
+        temp_collisions = self.collisions.copy()
+        for idx in range(len(temp_collisions)):
+            temp_collisions[idx] = (temp_collisions[idx] - self.Car_Line_Length / 2) / (
+                self.Car_Line_Length / 2
+            )
+
+        target_pos = self.target.Car_Pos
+        target_angle = calc.get_angle_to_gate(self.Car_Pos, (target_pos, target_pos))
+        target_angle = target_angle - self.Car_Rot
+        target_angle = (target_angle + 360) % 360
+
+        return np.array(
+            temp_collisions.tolist()
+            + [(target_angle - 180) / 180]
+            + [self.distance_to_target / len(self.inner_lines)]
+            + np.divide(self.Car_Vel.copy(), 4).tolist()
+            + [min(max((self.Car_Rot - 180) / 180, -1), 1)],
+            dtype=np.float32,
+        )
+
+    def on_update(self, steps: int = 2):
+        self.action_cntr += 1
+        self.reward = 0
+
+        if self.left:
+            self.Car_Rot -= self.Car_Rot_Speed
+            self.Car_Rot = self.Car_Rot % 360
+
+        if self.right:
+            self.Car_Rot += self.Car_Rot_Speed
+            self.Car_Rot = self.Car_Rot % 360
+
+        for i in range(steps):
+            self.Car_Pos = np.add(self.Car_Pos, self.Car_Vel)
+
+            self.Car_Vel = np.multiply(self.Car_Vel, self.Car_Accel_Dec)
+
+            # TODO: add avg_speed to rewards
+            self.avg_speed = calc.get_average_speed(
+                self.avg_speed_samples, self.avg_speed, self.Car_Vel
+            )
+
+            # self.Car_Vel[0] = round(self.Car_Vel[0], 3)
+            # self.Car_Vel[1] = round(self.Car_Vel[1], 3)
+
+            if np.sqrt(self.Car_Vel.dot(self.Car_Vel)) <= 1e-3:
+                self.Car_Vel = np.multiply(self.Car_Vel, 0)
+
+            if self.foward:
+                self.Car_Vel = np.add(
+                    self.Car_Vel,
+                    calc.calc_line_length((0, 0), self.Car_Accel, self.Car_Rot),
+                )
+
+            if self.back:
+                self.Car_Vel = np.subtract(
+                    self.Car_Vel,
+                    calc.calc_line_length((0, 0), self.Car_Accel, self.Car_Rot),
+                )
+                self.reward -= 5
+
+            # calc and draw edge detection lines
+            self.collisions = self.draw_car_lines(
+                self.number_of_view_lines,
+                self.Car_Line_Length,
+                [self.inner_lines, self.outer_lines],
+                self.number_of_collisions,
+                i == steps - 1,
+            )
+
+            self.closest_point = calc.get_closest_point_idx(
+                self.Car_Pos, self.inner_lines
+            )
+
+            self.closest_target_point = calc.get_closest_point_idx(
+                self.target.Car_Pos, self.inner_lines
+            )
+
+            if self.closest_point <= self.closest_target_point:
+                dist = self.closest_target_point - self.closest_point
+                self.distance_to_target = dist
+                self.reward += (len(self.inner_lines) / max(dist, 1e-3)) / len(self.inner_lines)
+            else:
+                dist = len(self.inner_lines) - self.closest_point + self.closest_target_point
+                self.distance_to_target = dist
+                self.reward += (len(self.inner_lines) / max(dist, 1e-3)) / len(self.inner_lines)
+
+            if self.speed_reward:
+                self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
+
+            for dist in self.collisions:
+                if dist <= 5:
+                    if self.wall_penalty:
+                        self.reward = -10
+                    self.done = True
+
+            if (
+                self.Car_Pos[0] < 0
+                or self.Car_Pos[0] > self.SCREEN_WIDTH
+                or self.Car_Pos[1] < 0
+                or self.Car_Pos[1] > self.SCREEN_HEIGHT
+            ):
+                self.done = True
+
+            if i == steps - 1 and self.do_render:
+                # if self.action_cntr > 3000:
+                # self.render()
                 if self.do_render:
                     self.render()
 
