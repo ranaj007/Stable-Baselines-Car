@@ -686,14 +686,17 @@ class ChaserAgent(CarAgent):
                 self.target.Car_Pos, self.inner_lines
             )
 
+            max_distance = len(self.inner_lines)
             if self.closest_point <= self.closest_target_point:
                 dist = self.closest_target_point - self.closest_point
                 self.distance_to_target = dist
-                self.reward += (len(self.inner_lines) / max(dist, 1e-3)) / len(self.inner_lines)
             else:
-                dist = len(self.inner_lines) - self.closest_point + self.closest_target_point
+                dist = max_distance - self.closest_point + self.closest_target_point
                 self.distance_to_target = dist
-                self.reward += (len(self.inner_lines) / max(dist, 1e-3)) / len(self.inner_lines)
+            self.reward += max_distance / (dist + max_distance)
+
+            if self.distance_to_target > max_distance // 3:
+                self.reward -= 0.05 * (self.distance_to_target - max_distance // 2)
 
             if self.speed_reward:
                 self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
@@ -710,6 +713,9 @@ class ChaserAgent(CarAgent):
                 or self.Car_Pos[1] < 0
                 or self.Car_Pos[1] > self.SCREEN_HEIGHT
             ):
+                self.done = True
+
+            if self.target.done:
                 self.done = True
 
             if i == steps - 1 and self.do_render:
