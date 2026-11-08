@@ -365,28 +365,25 @@ class CarEnv(gym.Env):
     """
 
     def draw_car_lines(self, num_o_lines, line_length, collision_objects, number_of_collisions: int = 1):
-        distances = np.full(num_o_lines * number_of_collisions, line_length, dtype=np.float32)
-        for i in range(num_o_lines):
-            self.View_Line[i] = calc.calc_line_length(
-                self.Car_Pos,
-                line_length,
-                self.Car_Rot + (360 / num_o_lines) * i,
-            )
+        # View_Line end points are only needed for drawing
+        if self.draw_lines:
+            for i in range(num_o_lines):
+                self.View_Line[i] = calc.calc_line_length(
+                    self.Car_Pos,
+                    line_length,
+                    self.Car_Rot + (360 / num_o_lines) * i,
+                )
 
-            collision1 = calc.detect_collisions(
-                self.Car_Pos, self.Car_Pos, self.View_Line[i], collision_objects[0], self.Car_Line_Length, number_of_collisions
-            )
-            collision2 = calc.detect_collisions(
-                self.Car_Pos, self.Car_Pos, self.View_Line[i], collision_objects[1], self.Car_Line_Length, number_of_collisions
-            )
-
-            collisions = np.concatenate((collision1, collision2), axis=0)
-
-            collisions.sort()
-            collisions = collisions[:number_of_collisions]
-
-            distances[i * number_of_collisions : (i + 1) * number_of_collisions] = collisions
-        return distances
+        return calc.cast_rays(
+            self.Car_Pos,
+            float(self.Car_Rot),
+            num_o_lines,
+            float(line_length),
+            collision_objects[0],
+            collision_objects[1],
+            float(self.Car_Line_Length),
+            number_of_collisions,
+        )
 
     def get_observation(self):
         temp_collisions = self.collisions.copy()
@@ -476,8 +473,9 @@ class CarEnv(gym.Env):
                 self.reward_gates_coords[self.gate_progress],
                 self.reward_gates_coords[self.gate_progress + 1],
             ]
+            gate = np.asarray(self.next_gate)
             self.reward_dist = self.draw_car_lines(
-                8, self.Car_Line_Length, [self.next_gate, self.next_gate]
+                8, self.Car_Line_Length, [gate, gate]
             )
 
             if min(self.reward_dist) <= 7.5:

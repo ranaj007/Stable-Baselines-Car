@@ -259,50 +259,34 @@ class CarAgent(gym.Env):
         number_of_collisions: int = 1,
         draw: bool = False,
     ):
-        distances = np.full(
-            num_o_lines * number_of_collisions, line_length, dtype=np.float32
+        distances = calc.cast_rays(
+            self.Car_Pos,
+            float(self.Car_Rot),
+            num_o_lines,
+            float(line_length),
+            collision_objects[0],
+            collision_objects[1],
+            float(self.Car_Line_Length),
+            number_of_collisions,
         )
-        for i in range(num_o_lines):
-            self.View_Line[i] = calc.calc_line_length(
-                self.Car_Pos,
-                line_length,
-                self.Car_Rot + (360 / num_o_lines) * i,
-            )
 
-            collision1 = calc.detect_collisions(
-                self.Car_Pos,
-                self.Car_Pos,
-                self.View_Line[i],
-                collision_objects[0],
-                self.Car_Line_Length,
-                number_of_collisions,
-            )
-            collision2 = calc.detect_collisions(
-                self.Car_Pos,
-                self.Car_Pos,
-                self.View_Line[i],
-                collision_objects[1],
-                self.Car_Line_Length,
-                number_of_collisions,
-            )
-
-            collisions = np.concatenate((collision1, collision2), axis=0)
-
-            collisions.sort()
-            collisions = collisions[:number_of_collisions]
-
-            distances[i * number_of_collisions : (i + 1) * number_of_collisions] = (
-                collisions
-            )
-            if self.draw_lines and draw:
-                for j in range(number_of_collisions):
-                    collision = calc.calc_line_length(
-                        self.Car_Pos,
-                        collisions[j],
-                        self.Car_Rot + (360 / num_o_lines) * i,
-                    )
-                    collision = calc.to_int(collision)
-                    cv.circle(self.img, collision, 5, color=(0, 0, 255))
+        # View_Line end points and collision markers are only needed for drawing
+        if self.draw_lines:
+            for i in range(num_o_lines):
+                self.View_Line[i] = calc.calc_line_length(
+                    self.Car_Pos,
+                    line_length,
+                    self.Car_Rot + (360 / num_o_lines) * i,
+                )
+                if draw:
+                    for j in range(number_of_collisions):
+                        collision = calc.calc_line_length(
+                            self.Car_Pos,
+                            distances[i * number_of_collisions + j],
+                            self.Car_Rot + (360 / num_o_lines) * i,
+                        )
+                        collision = calc.to_int(collision)
+                        cv.circle(self.img, collision, 5, color=(0, 0, 255))
         return distances
 
     def get_observation(self):
@@ -397,10 +381,11 @@ class CarAgent(gym.Env):
                 self.reward_gates_coords[self.gate_progress],
                 self.reward_gates_coords[self.gate_progress + 1],
             ]
+            gate = np.asarray(self.next_gate)
             self.reward_dist = self.draw_car_lines(
                 self.number_of_view_lines,
                 self.Car_Line_Length,
-                [self.next_gate, self.next_gate],
+                [gate, gate],
             )
 
             if min(self.reward_dist) <= 7.5:

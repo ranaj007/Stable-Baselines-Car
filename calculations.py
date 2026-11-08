@@ -158,6 +158,48 @@ def detect_collisions(
 
 
 @jit(nopython=True)
+def cast_rays(
+    Car_Pos: np.ndarray,
+    Car_Rot: float,
+    num_o_lines: int,
+    line_length: float,
+    object1: np.ndarray,
+    object2: np.ndarray,
+    max_dist: float,
+    number_of_collisions: int = 1,
+) -> np.ndarray:
+    """
+    Casts num_o_lines evenly spaced rays from the car and returns, for each ray, the
+    closest number_of_collisions intersection distances across object1 and object2.
+
+    Doing the whole loop inside numba means numba only checks argument types once per
+    call, instead of once for every ray and every object (which dominated step time).
+
+    Returns:
+        np.ndarray
+            Shape (num_o_lines * number_of_collisions,), ray-major.
+    """
+    distances = np.empty(num_o_lines * number_of_collisions, dtype=np.float32)
+    origin = (float(Car_Pos[0]), float(Car_Pos[1]))
+    for i in range(num_o_lines):
+        view_line = _calc_line_length(
+            origin, line_length, Car_Rot + (360 / num_o_lines) * i
+        )
+        collision1 = detect_collisions(
+            Car_Pos, Car_Pos, view_line, object1, max_dist, number_of_collisions
+        )
+        collision2 = detect_collisions(
+            Car_Pos, Car_Pos, view_line, object2, max_dist, number_of_collisions
+        )
+        collisions = np.concatenate((collision1, collision2))
+        collisions.sort()
+        distances[i * number_of_collisions : (i + 1) * number_of_collisions] = (
+            collisions[:number_of_collisions]
+        )
+    return distances
+
+
+@jit(nopython=True)
 def get_angle_to_gate(Car_Pos: np.ndarray, next_gate: np.ndarray) -> float:
     center_pos = np.add(
         next_gate[0], np.divide(np.subtract(next_gate[1], next_gate[0]), 2)
