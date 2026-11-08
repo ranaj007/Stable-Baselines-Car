@@ -62,6 +62,7 @@ class CarEnv(gym.Env):
         self.number_of_collisions = number_of_collisions
 
         self.last_frame_time = time.time()
+        self.target_spf = 1 / 60
 
         self.Load_borders(
             self.inner_lines,
@@ -281,9 +282,13 @@ class CarEnv(gym.Env):
             1,
         )
         
+        elapsed = time.time() - self.last_frame_time
+        time.sleep(max(0, self.target_spf - elapsed))
+
+        fps = 1 / max(time.time() - self.last_frame_time, 1e-6)
+        self.last_frame_time = time.time()
+
         if self.show_fps:
-            fps = 1 / (time.time() - self.last_frame_time)
-            self.last_frame_time = time.time()
             cv.putText(
                 self.img,
                 f"FPS: {fps:.0f}",
@@ -501,12 +506,8 @@ class CarEnv(gym.Env):
             ):
                 self.done = True
 
-            if self.do_render and self.action_cntr > 3000:
+            if self.do_render and i == steps - 1:
                 self.render()
-
-            if self.do_render:
-                self.render(temp=i != 0)
-                time.sleep(0.01)
 
             if self.action_limit and self.action_cntr >= self.action_limit:
                 self.done = True
