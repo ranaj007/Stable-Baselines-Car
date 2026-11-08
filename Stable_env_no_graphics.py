@@ -138,6 +138,7 @@ class CarEnv(gym.Env):
         self.Car_Pos[1] += random.randint(-15, 15)
         self.Car_Rot = starting_state[1]
         self.Car_Rot += random.randint(-15, 15)
+        self.Car_Rot %= 360
         self.gate_progress = starting_state[2]
 
         self.Car_Vel = np.array(
