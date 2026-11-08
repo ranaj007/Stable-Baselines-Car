@@ -130,7 +130,7 @@ class CarAgent(gym.Env):
         self.Car_Pos[1] += random.randint(-15, 15)
         self.Car_Rot = starting_state[1]
         self.Car_Rot += random.randint(-15, 15)
-        self.Car_Rot %= 360
+        self.Car_Rot = self.Car_Rot % 360
         self.gate_progress = starting_state[2]
 
         self.Car_Vel = np.array(
@@ -291,11 +291,8 @@ class CarAgent(gym.Env):
         return distances
 
     def get_observation(self):
-        temp_collisions = self.collisions.copy()
-        for idx in range(len(temp_collisions)):
-            temp_collisions[idx] = (temp_collisions[idx] - self.Car_Line_Length / 2) / (
-                self.Car_Line_Length / 2
-            )
+        half_length = self.Car_Line_Length / 2
+        temp_collisions = (self.collisions.astype(np.float64) - half_length) / half_length
 
         # reward_index = [(self.reward_dist.index(min(self.reward_dist))-(len(self.reward_dist))/2)/(len(self.reward_dist))/2]
         # temp_list = self.reward_dist.tolist()
@@ -305,7 +302,7 @@ class CarAgent(gym.Env):
         return np.array(
             temp_collisions.tolist()
             + [(gate_angle - 180) / 180]
-            + [(min(self.reward_dist) - 7.5) / self.Car_Line_Length]
+            + [(self.reward_dist.min() - 7.5) / self.Car_Line_Length]
             + np.divide(self.Car_Vel.copy(), 4).tolist()
             # + [(self.Car_Rot - 180) / 180],
             + [min(max((self.Car_Rot - 180) / 180, -1), 1)],
@@ -378,18 +375,17 @@ class CarAgent(gym.Env):
             )
 
             # calc and draw reward gate detection lines
-            self.next_gate = [
-                self.reward_gates_coords[self.gate_progress],
-                self.reward_gates_coords[self.gate_progress + 1],
+            self.next_gate = self.reward_gates_coords[
+                [self.gate_progress, self.gate_progress + 1]
             ]
-            gate = np.asarray(self.next_gate)
+            gate = self.next_gate
             self.reward_dist = self.draw_car_lines(
                 self.number_of_view_lines,
                 self.Car_Line_Length,
                 [gate, gate],
             )
 
-            if min(self.reward_dist) <= 7.5:
+            if self.reward_dist.min() <= 7.5:
                 self.reward += 100
                 self.gate_progress += 2
                 if self.gate_progress > len(self.reward_gates_coords) - 1:
@@ -401,11 +397,10 @@ class CarAgent(gym.Env):
             if self.speed_reward:
                 self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
 
-            for dist in self.collisions:
-                if dist <= 5:
-                    if self.wall_penalty:
-                        self.reward = -10
-                    self.done = True
+            if self.collisions.min() <= 5:
+                if self.wall_penalty:
+                    self.reward = -10
+                self.done = True
 
             if (
                 self.Car_Pos[0] < 0
@@ -594,11 +589,8 @@ class ChaserAgent(CarAgent):
         )
 
     def get_observation(self):
-        temp_collisions = self.collisions.copy()
-        for idx in range(len(temp_collisions)):
-            temp_collisions[idx] = (temp_collisions[idx] - self.Car_Line_Length / 2) / (
-                self.Car_Line_Length / 2
-            )
+        half_length = self.Car_Line_Length / 2
+        temp_collisions = (self.collisions.astype(np.float64) - half_length) / half_length
 
         target_pos = self.target.Car_Pos
         target_angle = calc.get_angle_to_gate(self.Car_Pos, (target_pos, target_pos))
@@ -687,11 +679,10 @@ class ChaserAgent(CarAgent):
             if self.speed_reward:
                 self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
 
-            for dist in self.collisions:
-                if dist <= 5:
-                    if self.wall_penalty:
-                        self.reward = -10
-                    self.done = True
+            if self.collisions.min() <= 5:
+                if self.wall_penalty:
+                    self.reward = -10
+                self.done = True
 
             if (
                 self.Car_Pos[0] < 0
