@@ -21,8 +21,8 @@ REFERENCE_STEP = None
 MAIN_COLOR = (0, 0, 255)  # red
 REFERENCE_COLOR = (255, 0, 0)  # blue
 
+RENDER = True # whether to render the race (render is capped at 60 fps)
 LAPS = 10  # laps to win a race
-RENDER = True 
 
 def find_model(run_name: str, step: int | None = None) -> str:
     """Path to a run's checkpoint at `step`, or its latest checkpoint if step is None."""
@@ -46,7 +46,7 @@ def make_car(track: Track, render_text: bool, color: tuple[int, int, int]) -> Ca
         color=color,
         training=False,
         draw_lines=False,
-        do_render=True,
+        do_render=RENDER,
         render_text=render_text,
         speed_reward=True,
         number_of_collisions=3,
@@ -54,7 +54,7 @@ def make_car(track: Track, render_text: bool, color: tuple[int, int, int]) -> Ca
 
 
 if __name__ == "__main__":
-    track = Track(do_render=True, show_fps=True)
+    track = Track(do_render=RENDER, show_fps=True)
 
     # Live tuning (main car only): a / d / r select acceleration, deceleration or rotation; + / - change it
     env = make_car(track, render_text=True, color=MAIN_COLOR)
@@ -65,6 +65,7 @@ if __name__ == "__main__":
 
     main_crashes = reference_crashes = 0
     main_wins = reference_wins = 0
+    races = 0
 
     while True:
         # Both cars start from the same state: reset() seeds `random` before choosing the start
@@ -77,7 +78,8 @@ if __name__ == "__main__":
         # The race restarts when either car crashes or finishes LAPS laps. The finish line is
         # the first reward gate after the shared starting point.
         while not race_over:
-            track.new_frame()
+            if RENDER:
+                track.new_frame()
 
             # Main car takes its action
             action, _ = model.predict(obs)
@@ -99,8 +101,11 @@ if __name__ == "__main__":
 
             race_over = done or reference_done or main_finished or reference_finished
 
+            if not RENDER:
+                continue
+
             track.draw_scoreboard(
-                cars=[("Main", MAIN_COLOR), ("Reference", REFERENCE_COLOR)],
+                cars=[("New", MAIN_COLOR), ("Reference", REFERENCE_COLOR)],
                 stats={
                     "Lap": [f"{min(e.laps_completed + 1, LAPS)}/{LAPS}" for e in (env, reference_env)],
                     "Wins": [main_wins, reference_wins],
@@ -108,3 +113,10 @@ if __name__ == "__main__":
                 },
             )
             env.handle_key(track.render())
+
+        races += 1
+        if not RENDER:
+            print(
+                f"Race {races}: wins {main_wins}-{reference_wins} (main-reference), "
+                f"crashes {main_crashes}-{reference_crashes}"
+            )
