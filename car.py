@@ -108,7 +108,7 @@ class CarAgent(gym.Env):
         info = {}
 
         if self.training:
-            return observation, self.reward, self.done, False, info
+            return observation, self.reward, self.terminated, self.truncated, info
 
         return observation, self.reward, self.done, info
 
@@ -122,6 +122,8 @@ class CarAgent(gym.Env):
         self.reward = 0
         self.total_score = 0
         self.done = False
+        self.terminated = False  # crashed / left the screen: a true end state
+        self.truncated = False  # cut off by a time limit: not an end state
 
         starting_state = random.choice(self.start_positions)
 
@@ -130,6 +132,7 @@ class CarAgent(gym.Env):
         self.Car_Pos[1] += random.randint(-15, 15)
         self.Car_Rot = starting_state[1]
         self.Car_Rot += random.randint(-15, 15)
+        self.Car_Rot = self.Car_Rot % 360
         self.gate_progress = starting_state[2]
 
         self.Car_Vel = np.array(
@@ -259,58 +262,39 @@ class CarAgent(gym.Env):
         number_of_collisions: int = 1,
         draw: bool = False,
     ):
-        distances = np.full(
-            num_o_lines * number_of_collisions, line_length, dtype=np.float32
+        distances = calc.cast_rays(
+            self.Car_Pos,
+            float(self.Car_Rot),
+            num_o_lines,
+            float(line_length),
+            collision_objects[0],
+            collision_objects[1],
+            float(self.Car_Line_Length),
+            number_of_collisions,
         )
-        for i in range(num_o_lines):
-            self.View_Line[i] = calc.calc_line_length(
-                self.Car_Pos,
-                line_length,
-                self.Car_Rot + (360 / num_o_lines) * i,
-            )
 
-            collision1 = calc.detect_collisions(
-                self.Car_Pos,
-                self.Car_Pos,
-                self.View_Line[i],
-                collision_objects[0],
-                self.Car_Line_Length,
-                number_of_collisions,
-            )
-            collision2 = calc.detect_collisions(
-                self.Car_Pos,
-                self.Car_Pos,
-                self.View_Line[i],
-                collision_objects[1],
-                self.Car_Line_Length,
-                number_of_collisions,
-            )
-
-            collisions = np.concatenate((collision1, collision2), axis=0)
-
-            collisions.sort()
-            collisions = collisions[:number_of_collisions]
-
-            distances[i * number_of_collisions : (i + 1) * number_of_collisions] = (
-                collisions
-            )
-            if self.draw_lines and draw:
-                for j in range(number_of_collisions):
-                    collision = calc.calc_line_length(
-                        self.Car_Pos,
-                        collisions[j],
-                        self.Car_Rot + (360 / num_o_lines) * i,
-                    )
-                    collision = calc.to_int(collision)
-                    cv.circle(self.img, collision, 5, color=(0, 0, 255))
+        # View_Line end points and collision markers are only needed for drawing
+        if self.draw_lines:
+            for i in range(num_o_lines):
+                self.View_Line[i] = calc.calc_line_length(
+                    self.Car_Pos,
+                    line_length,
+                    self.Car_Rot + (360 / num_o_lines) * i,
+                )
+                if draw:
+                    for j in range(number_of_collisions):
+                        collision = calc.calc_line_length(
+                            self.Car_Pos,
+                            distances[i * number_of_collisions + j],
+                            self.Car_Rot + (360 / num_o_lines) * i,
+                        )
+                        collision = calc.to_int(collision)
+                        cv.circle(self.img, collision, 5, color=(0, 0, 255))
         return distances
 
     def get_observation(self):
-        temp_collisions = self.collisions.copy()
-        for idx in range(len(temp_collisions)):
-            temp_collisions[idx] = (temp_collisions[idx] - self.Car_Line_Length / 2) / (
-                self.Car_Line_Length / 2
-            )
+        half_length = self.Car_Line_Length / 2
+        temp_collisions = (self.collisions.astype(np.float64) - half_length) / half_length
 
         # reward_index = [(self.reward_dist.index(min(self.reward_dist))-(len(self.reward_dist))/2)/(len(self.reward_dist))/2]
         # temp_list = self.reward_dist.tolist()
@@ -320,7 +304,7 @@ class CarAgent(gym.Env):
         return np.array(
             temp_collisions.tolist()
             + [(gate_angle - 180) / 180]
-            + [(min(self.reward_dist) - 7.5) / self.Car_Line_Length]
+            + [(self.reward_dist.min() - 7.5) / self.Car_Line_Length]
             + np.divide(self.Car_Vel.copy(), 4).tolist()
             # + [(self.Car_Rot - 180) / 180],
             + [min(max((self.Car_Rot - 180) / 180, -1), 1)],
@@ -393,17 +377,17 @@ class CarAgent(gym.Env):
             )
 
             # calc and draw reward gate detection lines
-            self.next_gate = [
-                self.reward_gates_coords[self.gate_progress],
-                self.reward_gates_coords[self.gate_progress + 1],
+            self.next_gate = self.reward_gates_coords[
+                [self.gate_progress, self.gate_progress + 1]
             ]
+            gate = self.next_gate
             self.reward_dist = self.draw_car_lines(
                 self.number_of_view_lines,
                 self.Car_Line_Length,
-                [self.next_gate, self.next_gate],
+                [gate, gate],
             )
 
-            if min(self.reward_dist) <= 7.5:
+            if self.reward_dist.min() <= 7.5:
                 self.reward += 100
                 self.gate_progress += 2
                 if self.gate_progress > len(self.reward_gates_coords) - 1:
@@ -415,11 +399,10 @@ class CarAgent(gym.Env):
             if self.speed_reward:
                 self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
 
-            for dist in self.collisions:
-                if dist <= 5:
-                    if self.wall_penalty:
-                        self.reward = -10
-                    self.done = True
+            if self.collisions.min() <= 5:
+                if self.wall_penalty:
+                    self.reward = -10
+                self.terminated = True
 
             if (
                 self.Car_Pos[0] < 0
@@ -427,7 +410,7 @@ class CarAgent(gym.Env):
                 or self.Car_Pos[1] < 0
                 or self.Car_Pos[1] > self.SCREEN_HEIGHT
             ):
-                self.done = True
+                self.terminated = True
 
             if i == steps - 1 and self.do_render:
                 # if self.action_cntr > 3000:
@@ -436,9 +419,14 @@ class CarAgent(gym.Env):
                     self.render()
 
             if self.action_limit and self.action_cntr >= self.action_limit:
-                self.done = True
+                self.truncated = True
 
             self.total_score += self.reward
+
+            # stop simulating once the episode is over (e.g. don't drive through the wall)
+            self.done = self.terminated or self.truncated
+            if self.done:
+                break
 
         observation = self.get_observation()
 
@@ -608,11 +596,8 @@ class ChaserAgent(CarAgent):
         )
 
     def get_observation(self):
-        temp_collisions = self.collisions.copy()
-        for idx in range(len(temp_collisions)):
-            temp_collisions[idx] = (temp_collisions[idx] - self.Car_Line_Length / 2) / (
-                self.Car_Line_Length / 2
-            )
+        half_length = self.Car_Line_Length / 2
+        temp_collisions = (self.collisions.astype(np.float64) - half_length) / half_length
 
         target_pos = self.target.Car_Pos
         target_angle = calc.get_angle_to_gate(self.Car_Pos, (target_pos, target_pos))
@@ -701,11 +686,10 @@ class ChaserAgent(CarAgent):
             if self.speed_reward:
                 self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
 
-            for dist in self.collisions:
-                if dist <= 5:
-                    if self.wall_penalty:
-                        self.reward = -10
-                    self.done = True
+            if self.collisions.min() <= 5:
+                if self.wall_penalty:
+                    self.reward = -10
+                self.terminated = True
 
             if (
                 self.Car_Pos[0] < 0
@@ -713,10 +697,10 @@ class ChaserAgent(CarAgent):
                 or self.Car_Pos[1] < 0
                 or self.Car_Pos[1] > self.SCREEN_HEIGHT
             ):
-                self.done = True
+                self.terminated = True
 
             if self.target.done:
-                self.done = True
+                self.truncated = True
 
             if i == steps - 1 and self.do_render:
                 # if self.action_cntr > 3000:
@@ -725,9 +709,14 @@ class ChaserAgent(CarAgent):
                     self.render()
 
             if self.action_limit and self.action_cntr >= self.action_limit:
-                self.done = True
+                self.truncated = True
 
             self.total_score += self.reward
+
+            # stop simulating once the episode is over (e.g. don't drive through the wall)
+            self.done = self.terminated or self.truncated
+            if self.done:
+                break
 
         observation = self.get_observation()
 

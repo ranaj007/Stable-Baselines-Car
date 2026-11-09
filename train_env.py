@@ -7,7 +7,7 @@ import os
 
 
 if __name__ == "__main__":
-    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2"
+    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026"
     models_dir = "models/PPO/" + run_name
     logdir = "logs/" + run_name
     model_path = ''
@@ -36,18 +36,19 @@ if __name__ == "__main__":
     env = make_vec_env(make_env, n_envs=8, vec_env_cls=SubprocVecEnv)
 
     TIMESTEPS = 100000
+    BATCH_SIZE = 512  # SB3 default is 64; larger batches make each PPO update much faster
     i = 1
 
     if model_path:
         print("Loading", model_path)
-        model = PPO.load(model_path, env, device="cpu")
+        model = PPO.load(model_path, env, device="cpu", batch_size=BATCH_SIZE)
         #model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu")
         #model.set_parameters(model_path)
 
         i = int(model_path.split("\\")[-1].split(".")[0]) // TIMESTEPS + 1
     else:
         print("Creating new model")
-        model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu")
+        model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu", batch_size=BATCH_SIZE)
 
     while True:
         model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name="Speed_Reward", progress_bar=True)
