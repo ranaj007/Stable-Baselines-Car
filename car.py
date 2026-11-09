@@ -477,7 +477,8 @@ class CarAgent(gym.Env):
             ):
                 self.terminated = True
 
-            #if i == steps - 1 and self.do_render:
+            if i == steps - 1 and self.do_render:
+                self.render()
                 # if self.action_cntr > 3000:
                 # self.render()
                 #if self.do_render:
@@ -768,7 +769,8 @@ class ChaserAgent(CarAgent):
             if self.target.done:
                 self.truncated = True
 
-            #if i == steps - 1 and self.do_render:
+            if i == steps - 1 and self.do_render:
+                self.render()
                 # if self.action_cntr > 3000:
                 # self.render()
                 #if self.do_render:
