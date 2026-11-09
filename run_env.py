@@ -1,5 +1,6 @@
-from Stable_env_no_graphics import CarEnv
 from stable_baselines3 import PPO
+from car import CarAgent
+from track import Track
 from glob import glob
 
 models_dir = "models/PPO/Speed_Reward_5"
@@ -18,7 +19,18 @@ if models:
 
 model_path = f"{models_dir}/2621440.zip"
 
-env = CarEnv(training=False, draw_lines=False, do_render=True, show_fps=True, speed_reward=True, number_of_collisions=3)
+track = Track(do_render=True, show_fps=True)
+
+# Live tuning: a / d / r select acceleration, deceleration or rotation; + / - change it
+env = CarAgent(
+    track=track,
+    training=False,
+    draw_lines=False,
+    do_render=True,
+    render_text=True,
+    speed_reward=True,
+    number_of_collisions=3,
+)
 
 model = PPO.load(model_path, env, device="cpu")
 
@@ -26,5 +38,7 @@ while True:
     obs = env.reset()
     done = False
     while not done:
+        track.new_frame()
         action, _ = model.predict(obs)
-        obs, reward, done, info = env.step(action)
+        obs, reward, done, info = env.step(action)  # the car draws itself onto the frame
+        env.handle_key(track.render())

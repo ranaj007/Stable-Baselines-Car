@@ -87,7 +87,9 @@ class Track():
         return self.img
     
 
-    def render(self):
+    def render(self) -> int:
+        """Show the frame at up to target_fps. Returns the key pressed (-1 if none),
+        so it can be passed to CarAgent.handle_key for live tuning."""
         spf = (time.time() - self.last_frame_time)
         fps = 1 / spf if spf > 0 else 0
 
@@ -109,7 +111,7 @@ class Track():
             )
 
         cv.imshow("Car Go Vroom", self.img)
-        cv.waitKey(1)
+        return cv.waitKey(1)
 
 
     # ----------------------------------------------------------------------------------------------------------------------------------------------------------

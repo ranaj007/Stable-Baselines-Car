@@ -31,6 +31,8 @@ class CarAgent(gym.Env):
         training: bool = False,
         number_of_view_lines: int = 8,
         number_of_collisions: int = 3,
+        reward_scale: float = 1.0,
+        wall_penalty: float = 100,
     ):
         super(CarAgent, self).__init__()
         self.action_space = spaces.Discrete(6)
@@ -61,11 +63,15 @@ class CarAgent(gym.Env):
         self.draw_lines = draw_lines
         self.render_text = render_text
         self.action_limit = action_limit
-        self.wall_penalty = True
+        self.wall_penalty = wall_penalty
         self.speed_reward = speed_reward
         self.training = training
         self.number_of_collisions = number_of_collisions
         self.number_of_view_lines = number_of_view_lines
+        self.reward_scale = reward_scale
+
+        # live tuning (see handle_key): which physics setting the + / - keys change
+        self.alter_mode = "Acceleration"
 
         self.Car_Accel = 0.11
         self.Car_Accel_Dec = 0.97
@@ -107,10 +113,12 @@ class CarAgent(gym.Env):
 
         info = {}
 
-        if self.training:
-            return observation, self.reward, self.terminated, self.truncated, info
+        reward = self.reward * self.reward_scale
 
-        return observation, self.reward, self.done, info
+        if self.training:
+            return observation, reward, self.terminated, self.truncated, info
+
+        return observation, reward, self.done, info
 
     def reset(self, seed=None, options=None):
         random.seed(seed)
@@ -253,6 +261,47 @@ class CarAgent(gym.Env):
                 BLACK,
                 1,
             )
+            cv.putText(
+                self.img,
+                f"{self.alter_mode}: {self._tuned_value():.2f}",
+                (100, 550),
+                cv.FONT_HERSHEY_SIMPLEX,
+                1,
+                BLACK,
+                1,
+            )
+
+    def _tuned_value(self) -> float:
+        if self.alter_mode == "Deceleration":
+            return self.Car_Accel_Dec
+        if self.alter_mode == "Rotation":
+            return self.Car_Rot_Speed
+        return self.Car_Accel
+
+    def handle_key(self, key: int):
+        """Live tuning: a / d / r pick acceleration, deceleration or rotation; + / - change it by 0.01.
+
+        Pass in the key code returned by Track.render().
+        """
+        if key == ord("a"):
+            self.alter_mode = "Acceleration"
+        elif key == ord("d"):
+            self.alter_mode = "Deceleration"
+        elif key == ord("r"):
+            self.alter_mode = "Rotation"
+
+        change = 0
+        if key == ord("+"):
+            change = 0.01
+        elif key == ord("-"):
+            change = -0.01
+
+        if self.alter_mode == "Acceleration":
+            self.Car_Accel += change
+        elif self.alter_mode == "Deceleration":
+            self.Car_Accel_Dec += change
+        elif self.alter_mode == "Rotation":
+            self.Car_Rot_Speed += change
 
     def draw_car_lines(
         self,
@@ -400,8 +449,7 @@ class CarAgent(gym.Env):
                 self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
 
             if self.collisions.min() <= 5:
-                if self.wall_penalty:
-                    self.reward = -10
+                self.reward = -self.wall_penalty
                 self.terminated = True
 
             if (
@@ -687,8 +735,7 @@ class ChaserAgent(CarAgent):
                 self.reward += np.sqrt(self.Car_Vel.dot(self.Car_Vel))
 
             if self.collisions.min() <= 5:
-                if self.wall_penalty:
-                    self.reward = -10
+                self.reward = -self.wall_penalty
                 self.terminated = True
 
             if (

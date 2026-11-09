@@ -62,8 +62,6 @@ if __name__ == "__main__":
     n_steps_p_batch = ceil(n_timesteps / (n_steps * n_envs)) * n_steps * n_envs
 
     env = make_vec_env(make_env, n_envs=n_envs, vec_env_cls=SubprocVecEnv)
-    
-    i = 1
 
     if model_path:
         print("Loading", model_path)
@@ -71,7 +69,6 @@ if __name__ == "__main__":
         # model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu")
         # model.set_parameters(model_path)
 
-        i = int(model_path.split("\\")[-1].split(".")[0]) // n_timesteps + 1
     else:
         print("Creating new model")
         model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu")
@@ -88,5 +85,4 @@ if __name__ == "__main__":
             progress_bar=True,
         )
         print("Saving model")
-        model.save(f"{models_dir}/{n_steps_p_batch * i}")
-        i += 1
+        model.save(f"{models_dir}/{model.num_timesteps}")
