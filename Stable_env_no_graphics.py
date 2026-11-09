@@ -117,7 +117,7 @@ class CarEnv(gym.Env):
         # print(f'{self.reward=}')
 
         if self.training:
-            return observation, self.reward, self.done, False, info
+            return observation, self.reward, self.terminated, self.truncated, info
 
         return observation, self.reward, self.done, info
 
@@ -130,6 +130,8 @@ class CarEnv(gym.Env):
         self.reward = 0
         self.total_score = 0
         self.done = False
+        self.terminated = False  # crashed / left the screen: a true end state
+        self.truncated = False  # cut off by a time limit: not an end state
 
         starting_state = random.choice(self.start_positions)
 
@@ -492,7 +494,7 @@ class CarEnv(gym.Env):
             if self.collisions.min() <= 5:
                 if self.wall_penalty:
                     self.reward = -10
-                self.done = True
+                self.terminated = True
 
             if (
                 self.Car_Pos[0] < 0
@@ -500,15 +502,20 @@ class CarEnv(gym.Env):
                 or self.Car_Pos[1] < 0
                 or self.Car_Pos[1] > self.SCREEN_HEIGHT
             ):
-                self.done = True
+                self.terminated = True
 
             if self.do_render and i == steps - 1:
                 self.render()
 
             if self.action_limit and self.action_cntr >= self.action_limit:
-                self.done = True
+                self.truncated = True
 
             self.total_score += self.reward
+
+            # stop simulating once the episode is over (e.g. don't drive through the wall)
+            self.done = self.terminated or self.truncated
+            if self.done:
+                break
 
         observation = self.get_observation()
         
