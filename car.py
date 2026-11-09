@@ -33,6 +33,7 @@ class CarAgent(gym.Env):
         number_of_collisions: int = 3,
         reward_scale: float = 1.0,
         wall_penalty: float = 100,
+        color: tuple[int, int, int] = RED,  # car body colour, as (B, G, R) for OpenCV
     ):
         super(CarAgent, self).__init__()
         self.action_space = spaces.Discrete(6)
@@ -62,6 +63,7 @@ class CarAgent(gym.Env):
         self.do_render = do_render
         self.draw_lines = draw_lines
         self.render_text = render_text
+        self.color = color
         self.action_limit = action_limit
         self.wall_penalty = wall_penalty
         self.speed_reward = speed_reward
@@ -197,7 +199,7 @@ class CarAgent(gym.Env):
             self.img,
             car_back,
             car_front,
-            RED,
+            self.color,
             thickness=3,
         )
 
@@ -494,6 +496,7 @@ class ChaserAgent(CarAgent):
         action_limit: int = 0,
         number_of_view_lines: int = 8,
         number_of_collisions: int = 3,
+        color: tuple[int, int, int] = RED,
     ):
         super(ChaserAgent, self).__init__(
             track=track,
@@ -505,6 +508,7 @@ class ChaserAgent(CarAgent):
             training=training,
             number_of_view_lines=number_of_view_lines,
             number_of_collisions=number_of_collisions,
+            color=color,
         )
 
         self.target = target
@@ -566,7 +570,7 @@ class ChaserAgent(CarAgent):
             self.img,
             car_back,
             car_front,
-            RED,
+            self.color,
             thickness=3,
         )
 

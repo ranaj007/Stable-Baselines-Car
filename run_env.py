@@ -14,6 +14,10 @@ MAIN_STEP = 2621440
 REFERENCE_RUN = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2"
 REFERENCE_STEP = None
 
+# car body colours, as (B, G, R) for OpenCV
+MAIN_COLOR = (0, 0, 255)  # red
+REFERENCE_COLOR = (255, 0, 0)  # blue
+
 
 def find_model(run_name: str, step: int | None = None) -> str:
     """Path to a run's checkpoint at `step`, or its latest checkpoint if step is None."""
@@ -31,9 +35,10 @@ def find_model(run_name: str, step: int | None = None) -> str:
     return max(models, key=lambda p: int(os.path.splitext(os.path.basename(p))[0]))
 
 
-def make_car(track: Track, render_text: bool) -> CarAgent:
+def make_car(track: Track, render_text: bool, color: tuple[int, int, int]) -> CarAgent:
     return CarAgent(
         track=track,
+        color=color,
         training=False,
         draw_lines=False,
         do_render=True,
@@ -47,8 +52,8 @@ if __name__ == "__main__":
     track = Track(do_render=True, show_fps=True)
 
     # Live tuning (main car only): a / d / r select acceleration, deceleration or rotation; + / - change it
-    env = make_car(track, render_text=True)
-    reference_env = make_car(track, render_text=False)
+    env = make_car(track, render_text=True, color=MAIN_COLOR)
+    reference_env = make_car(track, render_text=False, color=REFERENCE_COLOR)
 
     model = PPO.load(find_model(MAIN_RUN, MAIN_STEP), env, device="cpu")
     reference_model = PPO.load(find_model(REFERENCE_RUN, REFERENCE_STEP), reference_env, device="cpu")
