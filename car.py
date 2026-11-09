@@ -158,6 +158,7 @@ class CarAgent(gym.Env):
         self.past_reward_dist = 200
         self.chng_dist = 0
         self.action_cntr = 0
+        self.gates_passed = 0  # reward gates passed this episode, in order (used for lap counting)
 
         temp_vel = self.Car_Vel.copy()
         self.Car_Vel = np.multiply(self.Car_Vel, 0)
@@ -305,6 +306,19 @@ class CarAgent(gym.Env):
         elif self.alter_mode == "Rotation":
             self.Car_Rot_Speed += change
 
+    @property
+    def gates_per_lap(self) -> int:
+        return len(self.reward_gates_coords) // 2  # each gate is a pair of end points
+
+    @property
+    def laps_completed(self) -> int:
+        """Full laps since the start of the episode.
+
+        The finish line is the first gate after the car's starting point: passing it the
+        first time starts lap 1, and each later pass completes a lap.
+        """
+        return max(0, self.gates_passed - 1) // self.gates_per_lap
+
     def draw_car_lines(
         self,
         num_o_lines: int,
@@ -440,6 +454,7 @@ class CarAgent(gym.Env):
 
             if self.reward_dist.min() <= 7.5:
                 self.reward += 100
+                self.gates_passed += 1
                 self.gate_progress += 2
                 if self.gate_progress > len(self.reward_gates_coords) - 1:
                     self.gate_progress = 0

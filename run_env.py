@@ -19,6 +19,8 @@ REFERENCE_STEP = None
 MAIN_COLOR = (0, 0, 255)  # red
 REFERENCE_COLOR = (255, 0, 0)  # blue
 
+LAPS = 10  # laps to win a race
+
 
 def find_model(run_name: str, step: int | None = None) -> str:
     """Path to a run's checkpoint at `step`, or its latest checkpoint if step is None."""
@@ -59,8 +61,8 @@ if __name__ == "__main__":
     model = PPO.load(find_model(MAIN_RUN, MAIN_STEP), env, device="cpu")
     reference_model = PPO.load(find_model(REFERENCE_RUN, REFERENCE_STEP), reference_env, device="cpu")
 
-    main_crashes = 0
-    reference_crashes = 0
+    main_crashes = reference_crashes = 0
+    main_wins = reference_wins = 0
 
     while True:
         # Both cars start from the same state: reset() seeds `random` before choosing the start
@@ -68,9 +70,11 @@ if __name__ == "__main__":
         obs = env.reset(seed=seed)
         reference_obs = reference_env.reset(seed=seed)
         done = reference_done = False
+        race_over = False
 
-        # When either car crashes, both restart together
-        while not (done or reference_done):
+        # The race restarts when either car crashes or finishes LAPS laps. The finish line is
+        # the first reward gate after the shared starting point.
+        while not race_over:
             track.new_frame()
 
             # Main car takes its action
@@ -85,8 +89,20 @@ if __name__ == "__main__":
             main_crashes += env.terminated
             reference_crashes += reference_env.terminated
 
-            track.draw_scoreboard([
-                ("Main", MAIN_COLOR, main_crashes),
-                ("Reference", REFERENCE_COLOR, reference_crashes),
-            ])
+            # a car that crashed on this step can't win; if both finish on the same step, both win
+            main_finished = env.laps_completed >= LAPS and not env.terminated
+            reference_finished = reference_env.laps_completed >= LAPS and not reference_env.terminated
+            main_wins += main_finished
+            reference_wins += reference_finished
+
+            race_over = done or reference_done or main_finished or reference_finished
+
+            track.draw_scoreboard(
+                cars=[("Main", MAIN_COLOR), ("Reference", REFERENCE_COLOR)],
+                stats={
+                    "Lap": [f"{min(e.laps_completed + 1, LAPS)}/{LAPS}" for e in (env, reference_env)],
+                    "Wins": [main_wins, reference_wins],
+                    "Crashes": [main_crashes, reference_crashes],
+                },
+            )
             env.handle_key(track.render())

@@ -88,36 +88,54 @@ class Track():
 
     def draw_scoreboard(
         self,
-        scores: list[tuple[str, tuple[int, int, int], int]],
-        title: str = "Crashes",
+        cars: list[tuple[str, tuple[int, int, int]]],
+        stats: dict[str, list],
         margin: int = 20,
-        line_height: int = 40,
+        scale: float = 0.7,
+        line_height: int = 30,
+        column_gap: int = 16,
     ):
-        """Draw a scoreboard in the bottom-right corner of the current frame.
+        """Draw a scoreboard table in the bottom-right corner of the current frame.
 
-        scores: one (name, colour, count) per row; the colour, as (B, G, R), is shown as a swatch.
-        margin: gap in pixels between the scoreboard and the window's right and bottom edges.
+        cars: one (name, colour) per column; the colour, as (B, G, R), is shown as a swatch.
+        stats: one row per entry, e.g. {"Wins": [1, 0], "Crashes": [2, 3]}, one value per car.
+        margin: gap in pixels between the table and the window's right and bottom edges.
         Call after new_frame() and before render().
         """
-        font, scale, thickness = cv.FONT_HERSHEY_SIMPLEX, 1, 1
-        swatch, gap = 20, 10
-        rows = [f"{name}: {count}" for name, _, count in scores]
+        font, thickness = cv.FONT_HERSHEY_SIMPLEX, 1
+        swatch, swatch_gap = int(18 * scale), 8
 
-        # size the block from the text so it stays inside the window however long the names get
-        title_width = cv.getTextSize(title, font, scale, thickness)[0][0]
-        row_width = max((cv.getTextSize(r, font, scale, thickness)[0][0] for r in rows), default=0)
-        width = max(title_width, swatch + gap + row_width)
-        descent = cv.getTextSize(title, font, scale, thickness)[1]
+        def text_width(text) -> int:
+            return cv.getTextSize(str(text), font, scale, thickness)[0][0]
+
+        # column widths from the text, so the table stays inside the window whatever it shows
+        label_width = max((text_width(label) for label in stats), default=0)
+        car_widths = [
+            max([swatch + swatch_gap + text_width(name)] + [text_width(values[i]) for values in stats.values()])
+            for i, (name, _) in enumerate(cars)
+        ]
+        width = label_width + sum(column_gap + w for w in car_widths)
+        descent = cv.getTextSize("Ag", font, scale, thickness)[1]
 
         x = self.SCREEN_WIDTH - margin - width
         bottom_y = self.SCREEN_HEIGHT - margin - descent  # baseline of the last row
-        y = bottom_y - line_height * len(rows)  # baseline of the title
+        header_y = bottom_y - line_height * len(stats)
 
-        cv.putText(self.img, title, (x, y), font, scale, BLACK, thickness)
-        for i, ((_, color, _), text) in enumerate(zip(scores, rows)):
-            line_y = y + line_height * (i + 1)
-            cv.rectangle(self.img, (x, line_y - swatch), (x + swatch, line_y), color, thickness=-1)
-            cv.putText(self.img, text, (x + swatch + gap, line_y), font, scale, BLACK, thickness)
+        # header: a swatch and name per car
+        col_x = x + label_width + column_gap
+        column_xs = []
+        for (name, color), w in zip(cars, car_widths):
+            column_xs.append(col_x)
+            cv.rectangle(self.img, (col_x, header_y - swatch), (col_x + swatch, header_y), color, thickness=-1)
+            cv.putText(self.img, name, (col_x + swatch + swatch_gap, header_y), font, scale, BLACK, thickness)
+            col_x += w + column_gap
+
+        # one row per stat
+        for row, (label, values) in enumerate(stats.items(), start=1):
+            row_y = header_y + line_height * row
+            cv.putText(self.img, label, (x, row_y), font, scale, BLACK, thickness)
+            for value, cx in zip(values, column_xs):
+                cv.putText(self.img, str(value), (cx, row_y), font, scale, BLACK, thickness)
 
 
     def render(self) -> int:
