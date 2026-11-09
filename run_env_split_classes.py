@@ -18,6 +18,8 @@ if models:
 
 #model_path = f"{models_dir}/50872320"
 
+model_path = f"{models_dir}/2621440.zip"
+
 env = ChaserAgent(
     track=track, target=target_env, do_render=True
 )

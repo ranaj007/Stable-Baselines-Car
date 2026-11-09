@@ -57,7 +57,6 @@ if __name__ == "__main__":
         #model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu")
         #model.set_parameters(model_path)
 
-        i = int(model_path.split("\\")[-1].split(".")[0]) // TIMESTEPS + 1
     else:
         print("Creating new model")
         model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu", batch_size=BATCH_SIZE)
@@ -65,5 +64,4 @@ if __name__ == "__main__":
     while True:
         model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name="Speed_Reward", progress_bar=True)
         print("Saving model")
-        model.save(f"{models_dir}/{TIMESTEPS*i}")
-        i += 1
+        model.save(f"{models_dir}/{model.num_timesteps}")

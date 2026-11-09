@@ -16,6 +16,7 @@ if models:
     models.sort(key=lambda x: int(x.split("\\")[-1].split(".")[0]))
     model_path = models[-1]
 
+model_path = f"{models_dir}/2621440.zip"
 
 env = CarEnv(training=False, draw_lines=False, do_render=True, show_fps=True, speed_reward=True, number_of_collisions=3)
 
