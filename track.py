@@ -1,6 +1,7 @@
-import numpy as np
-import cv2 as cv
 import time
+
+import cv2 as cv
+import numpy as np
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -9,8 +10,7 @@ GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
 
 
-class Track():
-
+class Track:
     def __init__(
         self,
         do_render: bool = False,

@@ -1,12 +1,14 @@
-from stable_baselines3 import PPO
-from gymnasium import spaces
-import calculations as calc
-import gymnasium as gym
-from track import Track
-from glob import glob
-import numpy as np
-import cv2 as cv
 import random
+from glob import glob
+
+import cv2 as cv
+import gymnasium as gym
+import numpy as np
+from gymnasium import spaces
+from stable_baselines3 import PPO
+
+import calculations as calc
+from track import Track
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -17,8 +19,6 @@ BLUE = (255, 0, 0)
 
 class CarAgent(gym.Env):
     """Custom Environment that follows gym interface"""
-
-    metadata = {"render.modes": ["human"]}
 
     def __init__(
         self,
@@ -35,7 +35,7 @@ class CarAgent(gym.Env):
         wall_penalty: float = 100,
         color: tuple[int, int, int] = RED,  # car body colour, as (B, G, R) for OpenCV
     ):
-        super(CarAgent, self).__init__()
+        super().__init__()
         self.action_space = spaces.Discrete(6)
 
         N_CHANNELS = 5 + 8 * number_of_collisions
@@ -477,11 +477,11 @@ class CarAgent(gym.Env):
             ):
                 self.terminated = True
 
-            if i == steps - 1 and self.do_render:
+            #if i == steps - 1 and self.do_render:
                 # if self.action_cntr > 3000:
                 # self.render()
-                if self.do_render:
-                    self.render()
+                #if self.do_render:
+                    #self.render()
 
             if self.action_limit and self.action_cntr >= self.action_limit:
                 self.truncated = True
@@ -513,7 +513,7 @@ class ChaserAgent(CarAgent):
         number_of_collisions: int = 3,
         color: tuple[int, int, int] = RED,
     ):
-        super(ChaserAgent, self).__init__(
+        super().__init__(
             track=track,
             do_render=do_render,
             draw_lines=False,
@@ -768,11 +768,11 @@ class ChaserAgent(CarAgent):
             if self.target.done:
                 self.truncated = True
 
-            if i == steps - 1 and self.do_render:
+            #if i == steps - 1 and self.do_render:
                 # if self.action_cntr > 3000:
                 # self.render()
-                if self.do_render:
-                    self.render()
+                #if self.do_render:
+                    #self.render()
 
             if self.action_limit and self.action_cntr >= self.action_limit:
                 self.truncated = True

@@ -1,12 +1,13 @@
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
-from stable_baselines3 import PPO
-from car import CarAgent, ChaserAgent
-from track import Track
+import os
 from glob import glob
 from math import ceil
-import os
 
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import SubprocVecEnv
+
+from car import CarAgent, ChaserAgent
+from track import Track
 
 if __name__ == "__main__":
     run_name = "chaser_4"

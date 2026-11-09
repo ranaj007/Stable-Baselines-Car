@@ -1,9 +1,11 @@
+import os
+import random
+from glob import glob
+
 from stable_baselines3 import PPO
+
 from car import CarAgent
 from track import Track
-from glob import glob
-import random
-import os
 
 MODELS_ROOT = "models/PPO"
 
@@ -20,7 +22,7 @@ MAIN_COLOR = (0, 0, 255)  # red
 REFERENCE_COLOR = (255, 0, 0)  # blue
 
 LAPS = 10  # laps to win a race
-
+RENDER = True 
 
 def find_model(run_name: str, step: int | None = None) -> str:
     """Path to a run's checkpoint at `step`, or its latest checkpoint if step is None."""
