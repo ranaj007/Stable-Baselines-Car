@@ -85,7 +85,40 @@ class Track():
         cv.polylines(self.img, [self.inner_lines], True, BLACK)
 
         return self.img
-    
+
+    def draw_scoreboard(
+        self,
+        scores: list[tuple[str, tuple[int, int, int], int]],
+        title: str = "Crashes",
+        margin: int = 20,
+        line_height: int = 40,
+    ):
+        """Draw a scoreboard in the bottom-right corner of the current frame.
+
+        scores: one (name, colour, count) per row; the colour, as (B, G, R), is shown as a swatch.
+        margin: gap in pixels between the scoreboard and the window's right and bottom edges.
+        Call after new_frame() and before render().
+        """
+        font, scale, thickness = cv.FONT_HERSHEY_SIMPLEX, 1, 1
+        swatch, gap = 20, 10
+        rows = [f"{name}: {count}" for name, _, count in scores]
+
+        # size the block from the text so it stays inside the window however long the names get
+        title_width = cv.getTextSize(title, font, scale, thickness)[0][0]
+        row_width = max((cv.getTextSize(r, font, scale, thickness)[0][0] for r in rows), default=0)
+        width = max(title_width, swatch + gap + row_width)
+        descent = cv.getTextSize(title, font, scale, thickness)[1]
+
+        x = self.SCREEN_WIDTH - margin - width
+        bottom_y = self.SCREEN_HEIGHT - margin - descent  # baseline of the last row
+        y = bottom_y - line_height * len(rows)  # baseline of the title
+
+        cv.putText(self.img, title, (x, y), font, scale, BLACK, thickness)
+        for i, ((_, color, _), text) in enumerate(zip(scores, rows)):
+            line_y = y + line_height * (i + 1)
+            cv.rectangle(self.img, (x, line_y - swatch), (x + swatch, line_y), color, thickness=-1)
+            cv.putText(self.img, text, (x + swatch + gap, line_y), font, scale, BLACK, thickness)
+
 
     def render(self) -> int:
         """Show the frame at up to target_fps. Returns the key pressed (-1 if none),

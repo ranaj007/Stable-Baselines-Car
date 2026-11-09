@@ -2,6 +2,7 @@ from stable_baselines3 import PPO
 from car import CarAgent
 from track import Track
 from glob import glob
+import random
 import os
 
 MODELS_ROOT = "models/PPO"
@@ -58,12 +59,18 @@ if __name__ == "__main__":
     model = PPO.load(find_model(MAIN_RUN, MAIN_STEP), env, device="cpu")
     reference_model = PPO.load(find_model(REFERENCE_RUN, REFERENCE_STEP), reference_env, device="cpu")
 
-    while True:
-        obs = env.reset()
-        reference_obs = reference_env.reset()
-        done = False
+    main_crashes = 0
+    reference_crashes = 0
 
-        while not done:
+    while True:
+        # Both cars start from the same state: reset() seeds `random` before choosing the start
+        seed = random.randrange(2**32)
+        obs = env.reset(seed=seed)
+        reference_obs = reference_env.reset(seed=seed)
+        done = reference_done = False
+
+        # When either car crashes, both restart together
+        while not (done or reference_done):
             track.new_frame()
 
             # Main car takes its action
@@ -74,8 +81,12 @@ if __name__ == "__main__":
             reference_action, _ = reference_model.predict(reference_obs)
             reference_obs, _, reference_done, _ = reference_env.step(reference_action)
 
-            # Reset the reference car if it crashes
-            if reference_done:
-                reference_obs = reference_env.reset()
+            # terminated = hit a wall or left the screen (not a time limit)
+            main_crashes += env.terminated
+            reference_crashes += reference_env.terminated
 
+            track.draw_scoreboard([
+                ("Main", MAIN_COLOR, main_crashes),
+                ("Reference", REFERENCE_COLOR, reference_crashes),
+            ])
             env.handle_key(track.render())
