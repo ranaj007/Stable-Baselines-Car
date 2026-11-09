@@ -7,7 +7,7 @@ import os
 
 
 if __name__ == "__main__":
-    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026"
+    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026_baseline_64"
     models_dir = "models/PPO/" + run_name
     logdir = "logs/" + run_name
     model_path = ''
@@ -33,10 +33,10 @@ if __name__ == "__main__":
         env.reset()
         return env
 
-    env = make_vec_env(make_env, n_envs=8, vec_env_cls=SubprocVecEnv)
+    env = make_vec_env(make_env, n_envs=16, vec_env_cls=SubprocVecEnv)
 
     TIMESTEPS = 100000
-    BATCH_SIZE = 512  # SB3 default is 64; larger batches make each PPO update much faster
+    BATCH_SIZE = 64  # SB3 default is 64; larger batches make each PPO update much faster but risks finding local optima
     i = 1
 
     if model_path:
