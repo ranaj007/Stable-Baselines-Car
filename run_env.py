@@ -6,7 +6,7 @@ models_dir = "models/PPO/Speed_Reward_5"
 model_path = models_dir + "/1070000.zip"
 # first attempt - best PPO 2950000.zip
 
-run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2"
+run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026_reward_scaled"
 models_dir = "models/PPO/" + run_name
 model_path = ''
 

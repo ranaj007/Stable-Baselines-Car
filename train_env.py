@@ -7,7 +7,12 @@ import os
 
 
 if __name__ == "__main__":
-    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026_baseline_64"
+    # Changing the reward makes this a different experiment: use a new run_name rather than
+    # resuming a model (and value function) trained on the old reward.
+    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026_reward_scaled"
+
+    REWARD_SCALE = 0.01  # rewards of about -10..+107 per step become about -0.1..+1.07
+    CRASH_PENALTY = 100  # a crash step's reward becomes -100 before scaling (-1 after); was -10
     models_dir = "models/PPO/" + run_name
     logdir = "logs/" + run_name
     model_path = ''
@@ -29,7 +34,14 @@ if __name__ == "__main__":
         os.makedirs(logdir)
 
     def make_env():
-        env = CarEnv(do_render=False, speed_reward=True, action_limit=1000, number_of_collisions=3)
+        env = CarEnv(
+            do_render=False,
+            speed_reward=True,
+            action_limit=1000,
+            number_of_collisions=3,
+            reward_scale=REWARD_SCALE,
+            crash_penalty=CRASH_PENALTY,
+        )
         env.reset()
         return env
 

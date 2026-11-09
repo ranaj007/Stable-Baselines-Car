@@ -27,6 +27,8 @@ class CarEnv(gym.Env):
         speed_reward=False,
         training=True,
         number_of_collisions=3,
+        reward_scale: float = 1.0,
+        crash_penalty: float | None = None,
     ):
         super(CarEnv, self).__init__()
         # Define action and observation space
@@ -60,6 +62,8 @@ class CarEnv(gym.Env):
         self.speed_reward = speed_reward
         self.training = training
         self.number_of_collisions = number_of_collisions
+        self.reward_scale = reward_scale
+        self.crash_penalty = crash_penalty
 
         self.last_frame_time = time.time()
         self.target_spf = 1 / 60
@@ -117,9 +121,9 @@ class CarEnv(gym.Env):
         # print(f'{self.reward=}')
 
         if self.training:
-            return observation, self.reward, self.terminated, self.truncated, info
+            return observation, self.reward * self.reward_scale, self.terminated, self.truncated, info
 
-        return observation, self.reward, self.done, info
+        return observation, self.reward * self.reward_scale, self.done, info
 
     def reset(self, seed=None, options=None):
         self.foward = False
@@ -493,7 +497,10 @@ class CarEnv(gym.Env):
 
             if self.collisions.min() <= 5:
                 if self.wall_penalty:
-                    self.reward = -10
+                    if self.crash_penalty is None:
+                        self.reward = -10
+                    else:
+                        self.reward = -self.crash_penalty
                 self.terminated = True
 
             if (
