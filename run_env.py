@@ -40,7 +40,7 @@ def find_model(run_name: str, step: int | None = None) -> str:
     return max(models, key=lambda p: int(os.path.splitext(os.path.basename(p))[0]))
 
 
-def make_car(track: Track, render_text: bool, color: tuple[int, int, int]) -> CarAgent:
+def make_car(track: Track, render_text: bool, color: tuple[int, int, int], number_of_collisions: int = 3) -> CarAgent:
     return CarAgent(
         track=track,
         color=color,
@@ -49,7 +49,7 @@ def make_car(track: Track, render_text: bool, color: tuple[int, int, int]) -> Ca
         do_render=RENDER,
         render_text=render_text,
         speed_reward=True,
-        number_of_collisions=3,
+        number_of_collisions=number_of_collisions,
     )
 
 
