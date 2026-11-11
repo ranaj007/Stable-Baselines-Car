@@ -59,7 +59,10 @@ CAMERA_MODES = ("Main", "Reference", "Overhead")
 CHASE_DISTANCE = 7
 CHASE_HEIGHT = 3
 CHASE_LOOK_AHEAD = 4
-CAMERA_SMOOTHING = 8  # higher follows the car more tightly
+# Smoothing time constants in seconds (higher = smoother but laggier). The policy often flicks
+# left/right every step (5 degrees each), so the camera follows a smoothed heading instead.
+HEADING_LAG = 0.35
+POSITION_LAG = 0.08
 
 
 def to_world(x: float, y: float, height: float = 0.0) -> Vec3:
@@ -87,6 +90,12 @@ def lerp_angle(a: float, b: float, t: float) -> float:
     """Interpolate between two angles in degrees the short way round."""
     diff = (b - a + 180) % 360 - 180
     return a + diff * t
+
+
+def smoothing_factor(dt: float, lag: float) -> float:
+    """Fraction of the way to move towards a target this frame, for exponential smoothing
+    that behaves the same at any frame rate."""
+    return 1 - np.exp(-dt / lag)
 
 
 def wall_mesh(points: np.ndarray) -> Mesh:
@@ -147,6 +156,7 @@ class Car3D:
 
         self.prev_pos = self.pos = np.zeros(2)
         self.prev_rot = self.rot = 0.0
+        self.draw_rot = 0.0  # heading as drawn this frame (between sim steps)
 
     def reset(self, seed: int):
         self.obs = self.env.reset(seed=seed)
@@ -167,13 +177,9 @@ class Car3D:
     def draw(self, t: float):
         """Place the box between the last two simulation states (t = 0..1) for smooth motion."""
         x, y = self.prev_pos + (self.pos - self.prev_pos) * t
-        rot = lerp_angle(self.prev_rot, self.rot, t)
+        self.draw_rot = lerp_angle(self.prev_rot, self.rot, t)
         self.entity.position = to_world(x, y, 0.15)
-        self.entity.rotation_y = heading_to_rotation_y(rot)
-
-    @property
-    def world_rot(self) -> float:
-        return float(self.env.Car_Rot)
+        self.entity.rotation_y = heading_to_rotation_y(self.draw_rot)
 
     @property
     def finished(self) -> bool:
@@ -206,15 +212,17 @@ class Race3D(Entity):
                            position=window.top_left + Vec2(0.03, -0.03))
 
         self.camera_mode = 0
+        self.camera_heading = 0.0  # smoothed heading the chase camera sits behind
+        self.snap_camera = True  # jump straight into place instead of swinging across the track
         self.sim_time = 0.0
         self.new_race()
-        self.place_camera(snap=True)
 
     def new_race(self):
         # both cars start from the same state: reset() seeds `random` before choosing the start
         seed = random.randrange(2**32)
         for car in self.cars:
             car.reset(seed)
+        self.snap_camera = True  # the cars have jumped to a new start
 
         # the finish line is the first gate after the start (see CarAgent.laps_completed)
         (x0, y0), (x1, y1) = self.cars[0].env.next_gate
@@ -249,20 +257,26 @@ class Race3D(Entity):
         self.place_camera()
         self.draw_text()
 
-    def place_camera(self, snap: bool = False):
+    def place_camera(self):
+        snap, self.snap_camera = self.snap_camera, False
+        dt = ursina_time.dt
         mode = CAMERA_MODES[self.camera_mode]
+
         if mode == "Overhead":
             width, height = self.track.SCREEN_WIDTH * PIXEL_SCALE, self.track.SCREEN_HEIGHT * PIXEL_SCALE
             target = Vec3(width / 2, 0, -height / 2)
             position = target + Vec3(0, 210, -75)
         else:
             car = self.cars[CAMERA_MODES.index(mode)]
-            forward = forward_vector(car.world_rot)
+            # ease the camera's heading towards the car's, so quick left/right flicks average out
+            heading_t = 1 if snap else smoothing_factor(dt, HEADING_LAG)
+            self.camera_heading = lerp_angle(self.camera_heading, car.draw_rot, heading_t) % 360
+            forward = forward_vector(self.camera_heading)
             target = car.entity.position + forward * CHASE_LOOK_AHEAD
             position = car.entity.position - forward * CHASE_DISTANCE + Vec3(0, CHASE_HEIGHT, 0)
 
-        smoothing = 1 if snap else min(1, ursina_time.dt * CAMERA_SMOOTHING)
-        camera.position = lerp(camera.position, position, smoothing)
+        position_t = 1 if snap else smoothing_factor(dt, POSITION_LAG)
+        camera.position = lerp(camera.position, position, position_t)
         camera.look_at(target, up=Vec3(0, 1, 0))  # Ursina defaults to the camera's own up, which drifts
 
     def draw_text(self):
@@ -289,6 +303,7 @@ class Race3D(Entity):
     def input(self, key):
         if key == "c":
             self.camera_mode = (self.camera_mode + 1) % len(CAMERA_MODES)
+            self.snap_camera = True
         elif key == "escape":
             application.quit()
         elif key in ("a", "d", "r"):
