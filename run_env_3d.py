@@ -9,6 +9,7 @@ Models, colours and LAPS are taken from run_env.py, so both views race the same 
 Controls:
     c           cycle the camera: chase main car, chase reference car, overhead
     a / d / r   pick acceleration, deceleration or rotation for live tuning (main car)
+    h / p       pick the chase camera's heading lag or position lag
     + / -       change the picked setting
     escape      quit
 """
@@ -61,8 +62,17 @@ CHASE_HEIGHT = 3
 CHASE_LOOK_AHEAD = 4
 # Smoothing time constants in seconds (higher = smoother but laggier). The policy often flicks
 # left/right every step (5 degrees each), so the camera follows a smoothed heading instead.
-HEADING_LAG = 0.35
-POSITION_LAG = 0.08
+# Both can be changed while running (h / p, then + / -); these are the starting values.
+HEADING_LAG = 0.05
+POSITION_LAG = 0.1
+
+# live-tuned camera settings: key -> (name, attribute on Race3D, step per + / - press)
+CAMERA_TUNING = {
+    "h": ("Heading lag", "heading_lag", 0.05),
+    "p": ("Position lag", "position_lag", 0.01),
+}
+PLUS_KEYS = ("=", "+", "shift+=", "num_add", "num_plus")
+MINUS_KEYS = ("-", "num_subtract", "num_minus")
 
 
 def to_world(x: float, y: float, height: float = 0.0) -> Vec3:
@@ -94,7 +104,9 @@ def lerp_angle(a: float, b: float, t: float) -> float:
 
 def smoothing_factor(dt: float, lag: float) -> float:
     """Fraction of the way to move towards a target this frame, for exponential smoothing
-    that behaves the same at any frame rate."""
+    that behaves the same at any frame rate. A lag of 0 means no smoothing."""
+    if lag <= 0:
+        return 1
     return 1 - np.exp(-dt / lag)
 
 
@@ -213,6 +225,9 @@ class Race3D(Entity):
 
         self.camera_mode = 0
         self.camera_heading = 0.0  # smoothed heading the chase camera sits behind
+        self.heading_lag = HEADING_LAG
+        self.position_lag = POSITION_LAG
+        self.camera_tuning = None  # key of the camera setting + / - change, or None for the car's
         self.snap_camera = True  # jump straight into place instead of swinging across the track
         self.sim_time = 0.0
         self.new_race()
@@ -269,13 +284,13 @@ class Race3D(Entity):
         else:
             car = self.cars[CAMERA_MODES.index(mode)]
             # ease the camera's heading towards the car's, so quick left/right flicks average out
-            heading_t = 1 if snap else smoothing_factor(dt, HEADING_LAG)
+            heading_t = 1 if snap else smoothing_factor(dt, self.heading_lag)
             self.camera_heading = lerp_angle(self.camera_heading, car.draw_rot, heading_t) % 360
             forward = forward_vector(self.camera_heading)
             target = car.entity.position + forward * CHASE_LOOK_AHEAD
             position = car.entity.position - forward * CHASE_DISTANCE + Vec3(0, CHASE_HEIGHT, 0)
 
-        position_t = 1 if snap else smoothing_factor(dt, POSITION_LAG)
+        position_t = 1 if snap else smoothing_factor(dt, self.position_lag)
         camera.position = lerp(camera.position, position, position_t)
         camera.look_at(target, up=Vec3(0, 1, 0))  # Ursina defaults to the camera's own up, which drifts
 
@@ -297,8 +312,16 @@ class Race3D(Entity):
         main = self.cars[0].env
         self.status.text = (
             f"Camera: {CAMERA_MODES[self.camera_mode]}  (c to change)\n"
-            f"{main.alter_mode}: {main._tuned_value():.2f}  (a/d/r, +/-)"
+            f"{self.tuning_label()}  (a/d/r/h/p, +/-)"
         )
+
+    def tuning_label(self) -> str:
+        """The setting + / - currently change, and its value."""
+        if self.camera_tuning is None:
+            main = self.cars[0].env
+            return f"{main.alter_mode}: {main._tuned_value():.2f}"
+        name, attribute, _ = CAMERA_TUNING[self.camera_tuning]
+        return f"{name}: {getattr(self, attribute):.2f}s"
 
     def input(self, key):
         if key == "c":
@@ -307,11 +330,18 @@ class Race3D(Entity):
         elif key == "escape":
             application.quit()
         elif key in ("a", "d", "r"):
+            self.camera_tuning = None
             self.cars[0].env.handle_key(ord(key))
-        elif key in ("+", "=", "gamepad plus"):
-            self.cars[0].env.handle_key(ord("+"))
-        elif key == "-":
-            self.cars[0].env.handle_key(ord("-"))
+        elif key in CAMERA_TUNING:
+            self.camera_tuning = key
+        elif key in PLUS_KEYS or key in MINUS_KEYS:
+            direction = 1 if key in PLUS_KEYS else -1
+            if self.camera_tuning is None:
+                self.cars[0].env.handle_key(ord("+" if direction > 0 else "-"))
+            else:
+                _, attribute, step = CAMERA_TUNING[self.camera_tuning]
+                value = getattr(self, attribute) + direction * step
+                setattr(self, attribute, round(max(0.0, value), 4))  # 0 = no smoothing
 
 
 def build_app() -> Ursina:
