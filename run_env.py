@@ -10,12 +10,12 @@ from track import Track
 MODELS_ROOT = "models/PPO"
 
 # main car: the model being trained (step=None picks the latest checkpoint)
-MAIN_RUN = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026_reward_scaled"
-MAIN_STEP = 2621440
+MAIN_RUN = "accel-0.11_decel-0.97_rotation-5_view-400_col-1_2026_reward_scaled"
+MAIN_STEP = None
 
 # reference car: an older model to compare against
-REFERENCE_RUN = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2"
-REFERENCE_STEP = None
+REFERENCE_RUN = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026_reward_scaled"
+REFERENCE_STEP = 2621440
 
 # car body colours, as (B, G, R) for OpenCV
 MAIN_COLOR = (0, 0, 255)  # red
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     track = Track(do_render=RENDER, show_fps=True)
 
     # Live tuning (main car only): a / d / r select acceleration, deceleration or rotation; + / - change it
-    env = make_car(track, render_text=True, color=MAIN_COLOR)
+    env = make_car(track, render_text=True, color=MAIN_COLOR, number_of_collisions=1)
     reference_env = make_car(track, render_text=False, color=REFERENCE_COLOR)
 
     model = PPO.load(find_model(MAIN_RUN, MAIN_STEP), env, device="cpu")

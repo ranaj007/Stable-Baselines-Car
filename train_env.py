@@ -11,7 +11,7 @@ from track import Track
 if __name__ == "__main__":
     # Changing the reward makes this a different experiment: use a new run_name rather than
     # resuming a model (and value function) trained on the old reward.
-    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026_reward_scaled"
+    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-1_2026_reward_scaled"
 
     REWARD_SCALE = 0.01  # rewards of about -10..+107 per step become about -0.1..+1.07
     WALL_PENALTY = 100  # a crash step's reward becomes -100 before scaling (-1 after); was -10
@@ -43,7 +43,7 @@ if __name__ == "__main__":
             do_render=False,
             speed_reward=True,
             action_limit=1000,
-            number_of_collisions=3,
+            number_of_collisions=1,
             reward_scale=REWARD_SCALE,
             wall_penalty=WALL_PENALTY,
         )
