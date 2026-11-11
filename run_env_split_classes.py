@@ -1,7 +1,9 @@
-from car import CarAgent, ChaserAgent
-from stable_baselines3 import PPO
-from track import Track
 from glob import glob
+
+from stable_baselines3 import PPO
+
+from car import CarAgent, ChaserAgent
+from track import Track
 
 track = Track(do_render=True, show_fps=True)
 

@@ -1,18 +1,20 @@
+import os
+from glob import glob
+
+from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
-from Stable_env_no_graphics import CarEnv
-from stable_baselines3 import PPO
-from glob import glob
-import os
 
+from car import CarAgent
+from track import Track
 
 if __name__ == "__main__":
     # Changing the reward makes this a different experiment: use a new run_name rather than
     # resuming a model (and value function) trained on the old reward.
-    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-3_2_2026_reward_scaled"
+    run_name = "accel-0.11_decel-0.97_rotation-5_view-400_col-1_2026_reward_scaled"
 
     REWARD_SCALE = 0.01  # rewards of about -10..+107 per step become about -0.1..+1.07
-    CRASH_PENALTY = 100  # a crash step's reward becomes -100 before scaling (-1 after); was -10
+    WALL_PENALTY = 100  # a crash step's reward becomes -100 before scaling (-1 after); was -10
     models_dir = "models/PPO/" + run_name
     logdir = "logs/" + run_name
     model_path = ''
@@ -34,13 +36,16 @@ if __name__ == "__main__":
         os.makedirs(logdir)
 
     def make_env():
-        env = CarEnv(
+        # each worker process builds its own Track rather than receiving a pickled copy
+        env = CarAgent(
+            track=Track(),
+            training=True,  # Gymnasium 5-tuple step API (CarAgent defaults to False)
             do_render=False,
             speed_reward=True,
             action_limit=1000,
-            number_of_collisions=3,
+            number_of_collisions=1,
             reward_scale=REWARD_SCALE,
-            crash_penalty=CRASH_PENALTY,
+            wall_penalty=WALL_PENALTY,
         )
         env.reset()
         return env
@@ -49,13 +54,10 @@ if __name__ == "__main__":
 
     TIMESTEPS = 100000
     BATCH_SIZE = 64  # SB3 default is 64; larger batches make each PPO update much faster but risks finding local optima
-    i = 1
 
     if model_path:
         print("Loading", model_path)
         model = PPO.load(model_path, env, device="cpu", batch_size=BATCH_SIZE)
-        #model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=logdir, device="cpu")
-        #model.set_parameters(model_path)
 
     else:
         print("Creating new model")

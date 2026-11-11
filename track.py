@@ -1,6 +1,7 @@
-import numpy as np
-import cv2 as cv
 import time
+
+import cv2 as cv
+import numpy as np
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -9,8 +10,7 @@ GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
 
 
-class Track():
-
+class Track:
     def __init__(
         self,
         do_render: bool = False,
@@ -85,9 +85,62 @@ class Track():
         cv.polylines(self.img, [self.inner_lines], True, BLACK)
 
         return self.img
-    
 
-    def render(self):
+    def draw_scoreboard(
+        self,
+        cars: list[tuple[str, tuple[int, int, int]]],
+        stats: dict[str, list],
+        margin: int = 20,
+        scale: float = 0.7,
+        line_height: int = 30,
+        column_gap: int = 16,
+    ):
+        """Draw a scoreboard table in the bottom-right corner of the current frame.
+
+        cars: one (name, colour) per column; the colour, as (B, G, R), is shown as a swatch.
+        stats: one row per entry, e.g. {"Wins": [1, 0], "Crashes": [2, 3]}, one value per car.
+        margin: gap in pixels between the table and the window's right and bottom edges.
+        Call after new_frame() and before render().
+        """
+        font, thickness = cv.FONT_HERSHEY_SIMPLEX, 1
+        swatch, swatch_gap = int(18 * scale), 8
+
+        def text_width(text) -> int:
+            return cv.getTextSize(str(text), font, scale, thickness)[0][0]
+
+        # column widths from the text, so the table stays inside the window whatever it shows
+        label_width = max((text_width(label) for label in stats), default=0)
+        car_widths = [
+            max([swatch + swatch_gap + text_width(name)] + [text_width(values[i]) for values in stats.values()])
+            for i, (name, _) in enumerate(cars)
+        ]
+        width = label_width + sum(column_gap + w for w in car_widths)
+        descent = cv.getTextSize("Ag", font, scale, thickness)[1]
+
+        x = self.SCREEN_WIDTH - margin - width
+        bottom_y = self.SCREEN_HEIGHT - margin - descent  # baseline of the last row
+        header_y = bottom_y - line_height * len(stats)
+
+        # header: a swatch and name per car
+        col_x = x + label_width + column_gap
+        column_xs = []
+        for (name, color), w in zip(cars, car_widths):
+            column_xs.append(col_x)
+            cv.rectangle(self.img, (col_x, header_y - swatch), (col_x + swatch, header_y), color, thickness=-1)
+            cv.putText(self.img, name, (col_x + swatch + swatch_gap, header_y), font, scale, BLACK, thickness)
+            col_x += w + column_gap
+
+        # one row per stat
+        for row, (label, values) in enumerate(stats.items(), start=1):
+            row_y = header_y + line_height * row
+            cv.putText(self.img, label, (x, row_y), font, scale, BLACK, thickness)
+            for value, cx in zip(values, column_xs):
+                cv.putText(self.img, str(value), (cx, row_y), font, scale, BLACK, thickness)
+
+
+    def render(self) -> int:
+        """Show the frame at up to target_fps. Returns the key pressed (-1 if none),
+        so it can be passed to CarAgent.handle_key for live tuning."""
         spf = (time.time() - self.last_frame_time)
         fps = 1 / spf if spf > 0 else 0
 
@@ -109,7 +162,7 @@ class Track():
             )
 
         cv.imshow("Car Go Vroom", self.img)
-        cv.waitKey(1)
+        return cv.waitKey(1)
 
 
     # ----------------------------------------------------------------------------------------------------------------------------------------------------------
