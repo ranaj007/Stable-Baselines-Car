@@ -7,7 +7,7 @@ restarts both cars, and the first car to finish LAPS laps wins. The simulation i
 Models, colours and LAPS are taken from run_env.py, so both views race the same cars.
 
 Controls:
-    c           cycle the camera: chase main car, chase reference car, overhead
+    c           cycle the camera: chase / first person for each car, then overhead
     a / d / r   pick acceleration, deceleration or rotation for live tuning (main car)
     h / p       pick the chase camera's heading lag or position lag
     + / -       change the picked setting
@@ -57,12 +57,27 @@ PIXEL_SCALE = 0.1  # world units per track pixel: the 1200 x 1000 track becomes 
 WALL_HEIGHT = 1.0
 GROUND_DETAIL = 3  # ground texture pixels per track pixel (higher = sharper up close, more memory)
 SIM_HZ = 60  # simulation steps per second, matching run_env.py's 60 FPS cap
-CAMERA_MODES = ("Main", "Reference", "Overhead")
+# camera views, in the order c cycles through: (label, index of the car followed, kind)
+CAMERA_MODES = (
+    ("Main chase", 0, "chase"),
+    ("Main first person", 0, "first person"),
+    ("Reference chase", 1, "chase"),
+    ("Reference first person", 1, "first person"),
+    ("Overhead", None, "overhead"),
+)
 
 # chase camera placement, in world units relative to the car
 CHASE_DISTANCE = 7
 CHASE_HEIGHT = 3
 CHASE_LOOK_AHEAD = 4
+CHASE_FOV = 40  # Ursina's default
+
+# first-person camera: the driver's eye in the cabin, looking a little down the road. The
+# cabin is hidden so the view is clear, leaving the car's body visible as a bonnet.
+EYE_HEIGHT = 0.45  # above the ground; the body's top is at 0.3 and the walls are 1.0
+EYE_FORWARD = 0.1  # from the car's centre (+ is towards the front); the car is 1.0 long
+FIRST_PERSON_PITCH = 4  # degrees looking down
+FIRST_PERSON_FOV = 80
 # Smoothing time constants in seconds (higher = smoother but laggier). The policy often flicks
 # left/right every step (5 degrees each), so the camera follows a smoothed heading instead.
 # Both can be changed while running (h / p, then + / -); these are the starting values.
@@ -213,10 +228,12 @@ class Car3D:
 
         # body, cabin and windscreen; 1 unit long like the 10-pixel 2D car
         self.entity = Entity(model="cube", color=bgr_to_color(bgr), scale=(0.55, 0.3, 1.0))
-        Entity(parent=self.entity, model="cube", color=color.rgb32(30, 30, 30),
-               scale=(0.8, 0.9, 0.45), position=(0, 0.75, -0.1))
-        Entity(parent=self.entity, model="cube", color=color.rgb32(80, 140, 230),
-               scale=(0.75, 0.6, 0.05), position=(0, 0.75, 0.13))
+        self.cabin = [  # hidden in this car's first-person view
+            Entity(parent=self.entity, model="cube", color=color.rgb32(30, 30, 30),
+                   scale=(0.8, 0.9, 0.45), position=(0, 0.75, -0.1)),
+            Entity(parent=self.entity, model="cube", color=color.rgb32(80, 140, 230),
+                   scale=(0.75, 0.6, 0.05), position=(0, 0.75, 0.13)),
+        ]
 
         self.prev_pos = self.pos = np.zeros(2)
         self.prev_rot = self.rot = 0.0
@@ -327,22 +344,39 @@ class Race3D(Entity):
     def place_camera(self):
         snap, self.snap_camera = self.snap_camera, False
         dt = ursina_time.dt
-        mode = CAMERA_MODES[self.camera_mode]
+        _, car_index, kind = CAMERA_MODES[self.camera_mode]
 
-        if mode == "Overhead":
+        # only the car being driven from the inside loses its cabin
+        for i, car in enumerate(self.cars):
+            for part in car.cabin:
+                part.visible = not (kind == "first person" and i == car_index)
+
+        camera.fov = FIRST_PERSON_FOV if kind == "first person" else CHASE_FOV
+        if kind == "overhead":
             width, height = self.track.SCREEN_WIDTH * PIXEL_SCALE, self.track.SCREEN_HEIGHT * PIXEL_SCALE
             target = Vec3(width / 2, 0, -height / 2)
             position = target + Vec3(0, 210, -75)
+            position_t = 1 if snap else smoothing_factor(dt, self.position_lag)
         else:
-            car = self.cars[CAMERA_MODES.index(mode)]
+            car = self.cars[car_index]
             # ease the camera's heading towards the car's, so quick left/right flicks average out
             heading_t = 1 if snap else smoothing_factor(dt, self.heading_lag)
             self.camera_heading = lerp_angle(self.camera_heading, car.draw_rot, heading_t) % 360
             forward = forward_vector(self.camera_heading)
-            target = car.entity.position + forward * CHASE_LOOK_AHEAD
-            position = car.entity.position - forward * CHASE_DISTANCE + Vec3(0, CHASE_HEIGHT, 0)
+            car_pos = car.entity.position
 
-        position_t = 1 if snap else smoothing_factor(dt, self.position_lag)
+            if kind == "first person":
+                # fixed to the car (a lagging eye would drift into the bodywork); the drawn car
+                # turns with every step, so the bonnet shows the steering against the smoothed view
+                position = Vec3(car_pos.x, EYE_HEIGHT, car_pos.z) + forward_vector(car.draw_rot) * EYE_FORWARD
+                drop = np.tan(np.radians(FIRST_PERSON_PITCH)) * 10
+                target = position + forward * 10 - Vec3(0, drop, 0)
+                position_t = 1
+            else:
+                target = car_pos + forward * CHASE_LOOK_AHEAD
+                position = car_pos - forward * CHASE_DISTANCE + Vec3(0, CHASE_HEIGHT, 0)
+                position_t = 1 if snap else smoothing_factor(dt, self.position_lag)
+
         camera.position = lerp(camera.position, position, position_t)
         camera.look_at(target, up=Vec3(0, 1, 0))  # Ursina defaults to the camera's own up, which drifts
 
@@ -362,7 +396,7 @@ class Race3D(Entity):
         self.scoreboard.text = "\n".join([line("", names)] + [line(k, v) for k, v in rows.items()])
 
         self.status.text = (
-            f"Camera: {CAMERA_MODES[self.camera_mode]}  (c to change)\n"
+            f"Camera: {CAMERA_MODES[self.camera_mode][0]}  (c to change)\n"
             f"{self.tuning_label()}  (a/d/r/h/p, +/-)"
         )
 
