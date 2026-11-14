@@ -16,7 +16,9 @@ Controls:
 
 import random
 
+import cv2 as cv
 import numpy as np
+from panda3d.core import SamplerState
 from PIL import Image
 from stable_baselines3 import PPO
 from ursina import (
@@ -53,6 +55,7 @@ from track import Track
 
 PIXEL_SCALE = 0.1  # world units per track pixel: the 1200 x 1000 track becomes 120 x 100
 WALL_HEIGHT = 1.0
+GROUND_DETAIL = 3  # ground texture pixels per track pixel (higher = sharper up close, more memory)
 SIM_HZ = 60  # simulation steps per second, matching run_env.py's 60 FPS cap
 CAMERA_MODES = ("Main", "Reference", "Overhead")
 
@@ -130,12 +133,61 @@ def wall_mesh(points: np.ndarray) -> Mesh:
     return Mesh(vertices=vertices, triangles=triangles, colors=colors)
 
 
+def smooth_noise(rng: np.random.Generator, shape: tuple[int, int], cell: int) -> np.ndarray:
+    """Soft random blotches about `cell` pixels across, in roughly -1..1."""
+    small = rng.uniform(-1, 1, (shape[0] // cell + 2, shape[1] // cell + 2)).astype(np.float32)
+    return cv.resize(small, (shape[1], shape[0]), interpolation=cv.INTER_CUBIC)
+
+
 def ground_texture(track: Track) -> Texture:
-    """The 2D track image (without cars) as a texture for the ground plane."""
-    bgr = track.new_frame().copy()
-    rgb = bgr[:, :, ::-1]
+    """Asphalt road with white edge lines on mown grass, as a texture for the ground plane.
+
+    Drawn from the same border polylines the cars collide with, at GROUND_DETAIL times the
+    track's pixel resolution. The noise is seeded, so the ground looks the same every run.
+    """
+    scale = GROUND_DETAIL
+    height, width = track.SCREEN_HEIGHT * scale, track.SCREEN_WIDTH * scale
+    rng = np.random.default_rng(0)
+
+    # road = inside the outer border and outside the inner one
+    road = np.zeros((height, width), np.uint8)
+    cv.fillPoly(road, [track.outer_lines * scale], 255)
+    cv.fillPoly(road, [track.inner_lines * scale], 0)
+    on_road = road > 0
+
+    # asphalt: dark grey with fine grain and faint patches
+    asphalt = (
+        72
+        + rng.normal(0, 6, (height, width)).astype(np.float32)
+        + 5 * smooth_noise(rng, (height, width), 40 * scale)
+    )
+    asphalt = np.stack([asphalt, asphalt, asphalt * 1.04], axis=-1)  # very slightly blue
+
+    # grass: green with blotches and mowing stripes
+    stripes = np.where((np.arange(width) // (25 * scale)) % 2 == 0, 8, -8).astype(np.float32)
+    shade = (
+        rng.normal(0, 7, (height, width)).astype(np.float32)
+        + 12 * smooth_noise(rng, (height, width), 30 * scale)
+        + stripes[None, :]
+    )
+    grass = np.stack([62 + shade * 0.6, 125 + shade, 50 + shade * 0.5], axis=-1)
+
+    rgb = np.where(on_road[..., None], asphalt, grass)
+
+    # white edge lines a little way in from each wall, using the distance to the road's edge
+    edge_distance = cv.distanceTransform(road, cv.DIST_L2, 5)
+    edge_line = on_road & (edge_distance >= 3 * scale) & (edge_distance <= 5 * scale)
+    rgb[edge_line] = 225 + rng.normal(0, 8, (np.count_nonzero(edge_line), 1))
+
+    rgb = np.clip(rgb, 0, 255).astype(np.uint8)
     # explicit RGBA: an RGB image comes through Ursina as fully transparent
-    return Texture(Image.fromarray(np.ascontiguousarray(rgb)).convert("RGBA"))
+    texture = Texture(Image.fromarray(rgb).convert("RGBA"))
+    # Ursina defaults to nearest-neighbour (blocky up close, shimmering far away); mipmaps plus
+    # anisotropic filtering keep the grain sharp at the chase camera's low angle
+    texture.filtering = "mipmap"
+    texture._texture.setMagfilter(SamplerState.FT_linear)
+    texture._texture.setAnisotropicDegree(8)
+    return texture
 
 
 class Car3D:
@@ -309,7 +361,6 @@ class Race3D(Entity):
 
         self.scoreboard.text = "\n".join([line("", names)] + [line(k, v) for k, v in rows.items()])
 
-        main = self.cars[0].env
         self.status.text = (
             f"Camera: {CAMERA_MODES[self.camera_mode]}  (c to change)\n"
             f"{self.tuning_label()}  (a/d/r/h/p, +/-)"
