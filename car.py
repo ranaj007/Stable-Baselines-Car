@@ -43,11 +43,13 @@ class CarAgent(gym.Env):
             low=-1, high=1, shape=(N_CHANNELS,), dtype=np.float32
         )
 
+        self.track = track
+
         inner_lines, outer_lines, reward_gates_coords, start_positions = (
-            track.get_borders()
+            self.track.get_borders()
         )
 
-        self.img = track.new_frame()
+        self.img = self.track.new_frame()
         self.SCREEN_WIDTH = self.img.shape[1]
         self.SCREEN_HEIGHT = self.img.shape[0]
         self.start_positions = start_positions
@@ -137,13 +139,19 @@ class CarAgent(gym.Env):
 
         starting_state = random.choice(self.start_positions)
 
+        forwards = random.choice([True, False])
+
+        _, _, reward_gates_coords, _ = self.track.get_borders()
+
+        self.reward_gates_coords = reward_gates_coords if forwards else reward_gates_coords[::-1]
+
         self.Car_Pos = np.array(starting_state[0].copy(), dtype=np.float32)
         self.Car_Pos[0] += random.randint(-15, 15)
         self.Car_Pos[1] += random.randint(-15, 15)
-        self.Car_Rot = starting_state[1]
+        self.Car_Rot = starting_state[1] if forwards else starting_state[1] + 180
         self.Car_Rot += random.randint(-15, 15)
         self.Car_Rot = self.Car_Rot % 360
-        self.gate_progress = starting_state[2]
+        self.gate_progress = starting_state[2] if forwards else -starting_state[2]
 
         self.Car_Vel = np.array(
             calc.calc_line_length((0, 0), random.uniform(0, 2), self.Car_Rot),
